@@ -1,4 +1,5 @@
 import electron from 'electron';
+import type { MpvInputBindingsSnapshot } from '../../types/session-bindings';
 import type { BrowserWindow as ElectronBrowserWindow, IpcMainEvent } from 'electron';
 import type {
   ChangelogSnapshot,
@@ -19,6 +20,13 @@ import type {
   YoutubePickerResolveRequest,
   YoutubePickerResolveResult,
 } from '../../types';
+import type {
+  MediaTimingReviewActionResult,
+  MediaTimingReviewPreviewRequest,
+  MediaTimingReviewResolveRequest,
+  MediaTimingReviewWaveformRequest,
+  MediaTimingReviewWaveformResult,
+} from '../../types/anki';
 import { IPC_CHANNELS, type OverlayHostedModal } from '../../shared/ipc/contracts';
 import {
   parseMpvCommand,
@@ -82,6 +90,7 @@ export interface IpcServiceDeps {
   setMecabEnabled: (enabled: boolean) => void;
   handleMpvCommand: (command: Array<string | number>) => void;
   getKeybindings: () => unknown;
+  getMpvInputBindings?: () => Promise<MpvInputBindingsSnapshot>;
   getSessionBindings?: () => CompiledSessionBinding[];
   getConfiguredShortcuts: () => unknown;
   dispatchSessionAction?: (request: SessionActionDispatchRequest) => void | Promise<void>;
@@ -99,6 +108,16 @@ export interface IpcServiceDeps {
   onYoutubePickerResolve: (
     request: YoutubePickerResolveRequest,
   ) => Promise<YoutubePickerResolveResult>;
+  previewMediaTimingReview?: (
+    request: MediaTimingReviewPreviewRequest,
+  ) => Promise<MediaTimingReviewActionResult>;
+  getMediaTimingReviewWaveform?: (
+    request: MediaTimingReviewWaveformRequest,
+  ) => Promise<MediaTimingReviewWaveformResult>;
+  stopMediaTimingReviewPreview?: (reviewId: string) => Promise<MediaTimingReviewActionResult>;
+  resolveMediaTimingReview?: (
+    request: MediaTimingReviewResolveRequest,
+  ) => MediaTimingReviewActionResult | Promise<MediaTimingReviewActionResult>;
   getAnkiConnectStatus: () => boolean;
   getRuntimeOptions: () => unknown;
   setRuntimeOption: (id: RuntimeOptionId, value: RuntimeOptionValue) => unknown;
@@ -222,6 +241,72 @@ function parseOverlayNotificationActionPayload(
   return { notificationId, actionId, ...(typeof noteId === 'number' ? { noteId } : {}) };
 }
 
+function parseMediaTimingReviewPreviewRequest(
+  payload: unknown,
+): MediaTimingReviewPreviewRequest | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (
+    typeof record.reviewId !== 'string' ||
+    !record.reviewId ||
+    typeof record.startTime !== 'number' ||
+    !Number.isFinite(record.startTime) ||
+    typeof record.endTime !== 'number' ||
+    !Number.isFinite(record.endTime)
+  ) {
+    return null;
+  }
+  return {
+    reviewId: record.reviewId,
+    startTime: record.startTime,
+    endTime: record.endTime,
+  };
+}
+
+function parseMediaTimingReviewWaveformRequest(
+  payload: unknown,
+): MediaTimingReviewWaveformRequest | null {
+  return parseMediaTimingReviewPreviewRequest(payload);
+}
+
+function parseMediaTimingReviewResolveRequest(
+  payload: unknown,
+): MediaTimingReviewResolveRequest | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.reviewId !== 'string' || !record.reviewId) return null;
+  const decision = record.decision;
+  if (!decision || typeof decision !== 'object') return null;
+  const decisionRecord = decision as Record<string, unknown>;
+  if (
+    decisionRecord.action === 'use-original' ||
+    decisionRecord.action === 'skip-media' ||
+    decisionRecord.action === 'discard'
+  ) {
+    return { reviewId: record.reviewId, decision: { action: decisionRecord.action } };
+  }
+  if (
+    decisionRecord.action === 'confirm' &&
+    typeof decisionRecord.startTime === 'number' &&
+    Number.isFinite(decisionRecord.startTime) &&
+    typeof decisionRecord.endTime === 'number' &&
+    Number.isFinite(decisionRecord.endTime) &&
+    (decisionRecord.text === undefined ||
+      (typeof decisionRecord.text === 'string' && decisionRecord.text.trim().length > 0))
+  ) {
+    return {
+      reviewId: record.reviewId,
+      decision: {
+        action: 'confirm',
+        startTime: decisionRecord.startTime,
+        endTime: decisionRecord.endTime,
+        ...(decisionRecord.text === undefined ? {} : { text: decisionRecord.text }),
+      },
+    };
+  }
+  return null;
+}
+
 export interface IpcDepsRuntimeOptions {
   getMainWindow: () => WindowLike | null;
   getVisibleOverlayVisibility: () => boolean;
@@ -261,6 +346,7 @@ export interface IpcDepsRuntimeOptions {
   getMecabTokenizer: () => MecabTokenizerLike | null;
   handleMpvCommand: (command: Array<string | number>) => void;
   getKeybindings: () => unknown;
+  getMpvInputBindings?: () => Promise<MpvInputBindingsSnapshot>;
   getSessionBindings?: () => CompiledSessionBinding[];
   getConfiguredShortcuts: () => unknown;
   dispatchSessionAction?: (request: SessionActionDispatchRequest) => void | Promise<void>;
@@ -278,6 +364,10 @@ export interface IpcDepsRuntimeOptions {
   onYoutubePickerResolve: (
     request: YoutubePickerResolveRequest,
   ) => Promise<YoutubePickerResolveResult>;
+  previewMediaTimingReview?: IpcServiceDeps['previewMediaTimingReview'];
+  getMediaTimingReviewWaveform?: IpcServiceDeps['getMediaTimingReviewWaveform'];
+  stopMediaTimingReviewPreview?: IpcServiceDeps['stopMediaTimingReviewPreview'];
+  resolveMediaTimingReview?: IpcServiceDeps['resolveMediaTimingReview'];
   getAnkiConnectStatus: () => boolean;
   getRuntimeOptions: () => unknown;
   setRuntimeOption: (id: RuntimeOptionId, value: RuntimeOptionValue) => unknown;
@@ -351,6 +441,7 @@ export function createIpcDepsRuntime(options: IpcDepsRuntimeOptions): IpcService
     },
     handleMpvCommand: options.handleMpvCommand,
     getKeybindings: options.getKeybindings,
+    getMpvInputBindings: options.getMpvInputBindings,
     getSessionBindings: options.getSessionBindings ?? (() => []),
     getConfiguredShortcuts: options.getConfiguredShortcuts,
     dispatchSessionAction: options.dispatchSessionAction ?? (async () => {}),
@@ -371,6 +462,10 @@ export function createIpcDepsRuntime(options: IpcDepsRuntimeOptions): IpcService
       options.activatePlaybackWindowForOverlayInteraction ?? (() => false),
     runSubsyncManual: options.runSubsyncManual,
     onYoutubePickerResolve: options.onYoutubePickerResolve,
+    previewMediaTimingReview: options.previewMediaTimingReview,
+    getMediaTimingReviewWaveform: options.getMediaTimingReviewWaveform,
+    stopMediaTimingReviewPreview: options.stopMediaTimingReviewPreview,
+    resolveMediaTimingReview: options.resolveMediaTimingReview,
     getAnkiConnectStatus: options.getAnkiConnectStatus,
     getRuntimeOptions: options.getRuntimeOptions,
     setRuntimeOption: options.setRuntimeOption,
@@ -495,6 +590,46 @@ export function registerIpcHandlers(deps: IpcServiceDeps, ipc: IpcMainRegistrar 
         return { ok: false, message: 'Invalid YouTube picker resolve payload' };
       }
       return await deps.onYoutubePickerResolve(parsedRequest);
+    },
+  );
+
+  ipc.handle(
+    IPC_CHANNELS.request.mediaTimingReviewPreview,
+    async (_event: unknown, payload: unknown) => {
+      const request = parseMediaTimingReviewPreviewRequest(payload);
+      if (!request || !deps.previewMediaTimingReview) {
+        return { ok: false, message: 'Timing preview is unavailable.' };
+      }
+      return await deps.previewMediaTimingReview(request);
+    },
+  );
+  ipc.handle(
+    IPC_CHANNELS.request.mediaTimingReviewWaveform,
+    async (_event: unknown, payload: unknown) => {
+      const request = parseMediaTimingReviewWaveformRequest(payload);
+      if (!request || !deps.getMediaTimingReviewWaveform) {
+        return { ok: false, message: 'Timing waveform is unavailable.' };
+      }
+      return await deps.getMediaTimingReviewWaveform(request);
+    },
+  );
+  ipc.handle(
+    IPC_CHANNELS.request.mediaTimingReviewStopPreview,
+    async (_event: unknown, reviewId: unknown) => {
+      if (typeof reviewId !== 'string' || !reviewId || !deps.stopMediaTimingReviewPreview) {
+        return { ok: false, message: 'Timing preview is unavailable.' };
+      }
+      return await deps.stopMediaTimingReviewPreview(reviewId);
+    },
+  );
+  ipc.handle(
+    IPC_CHANNELS.request.mediaTimingReviewResolve,
+    async (_event: unknown, payload: unknown) => {
+      const request = parseMediaTimingReviewResolveRequest(payload);
+      if (!request || !deps.resolveMediaTimingReview) {
+        return { ok: false, message: 'Timing review is unavailable.' };
+      }
+      return await deps.resolveMediaTimingReview(request);
     },
   );
 
@@ -636,6 +771,10 @@ export function registerIpcHandlers(deps: IpcServiceDeps, ipc: IpcMainRegistrar 
 
   ipc.handle(IPC_CHANNELS.request.getKeybindings, () => {
     return deps.getKeybindings();
+  });
+
+  ipc.handle(IPC_CHANNELS.request.getMpvInputBindings, () => {
+    return deps.getMpvInputBindings?.() ?? { keys: [], blockedKeys: [] };
   });
 
   ipc.handle(IPC_CHANNELS.request.getSessionBindings, () => {

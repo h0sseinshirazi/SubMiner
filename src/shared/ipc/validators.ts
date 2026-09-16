@@ -44,6 +44,7 @@ const SESSION_ACTION_IDS: SessionActionId[] = [
   'openControllerDebug',
   'openJimaku',
   'openTsukihime',
+  'openSubtitleGeneration',
   'openYoutubePicker',
   'openPlaylistBrowser',
   'openAnimeBrowser',
@@ -54,6 +55,7 @@ const SESSION_ACTION_IDS: SessionActionId[] = [
 
 const RUNTIME_OPTION_IDS: RuntimeOptionId[] = [
   'anki.autoUpdateNewCards',
+  'anki.mediaReviewTiming',
   'subtitle.annotation.knownWords.highlightEnabled',
   'subtitle.annotation.knownWords.maturityEnabled',
   'subtitle.annotation.nPlusOne',

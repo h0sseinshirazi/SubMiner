@@ -1,6 +1,8 @@
 # Installation
 
-SubMiner is a desktop app that draws an interactive layer - an **overlay** - on top of the [mpv](https://mpv.io) video player. As you watch native Japanese media, you can click or hover any word in the subtitles to look it up, then turn it into an Anki flashcard without pausing to switch apps. Building flashcards from real content you're watching is called **sentence mining**, and it's what SubMiner is built for. It bundles its own copy of **Yomitan** (a pop-up dictionary) and talks to **AnkiConnect** (an add-on that lets other programs add cards to Anki) so cards get filled in automatically.
+SubMiner draws an interactive overlay on top of the [mpv](https://mpv.io) video player. While you watch Japanese media, hover any word in the subtitles to look it up, then turn it into an Anki card without switching apps.
+
+Building cards from the content you are actually watching is called **sentence mining**, and it is the whole point of SubMiner. It bundles its own copy of **Yomitan** (a pop-up dictionary) and talks to **AnkiConnect** (the add-on that lets other programs write cards into Anki), so the sentence, audio, and screenshot fields get filled in for you.
 
 Three steps to get started:
 
@@ -8,11 +10,15 @@ Three steps to get started:
 2. **Install SubMiner** - from the AUR, or download from GitHub Releases
 3. **Launch the app** - first-run setup walks you through dictionaries, the launcher, and everything else
 
-## 1. Install Requirements
+## 1. Install requirements
 
-Only **mpv** is strictly required to run SubMiner. Everything else enhances the experience but is optional.
+Only **mpv** is strictly required. Everything else is optional, though you will want ffmpeg unless you are fine with cards that have no audio or screenshot.
 
-Several entries below exist only for the `subminer` command-line launcher, which is Linux and macOS only. On Windows you launch playback with the **SubMiner mpv** shortcut instead, so you can ignore those rows.
+Some rows below matter only for the `subminer` command-line launcher's picker features. On Windows, the **SubMiner mpv** shortcut remains the recommended playback entry point.
+
+[Local Japanese subtitle generation](/subtitle-generation) additionally requires whisper.cpp's `whisper-cli`, FFmpeg, and `ffprobe`. Configure their executable paths in Settings if needed. SubMiner can download a speech model explicitly, or use your existing multilingual GGML model.
+
+Optional [dialogue-focused generation](/subtitle-generation#prioritizing-spoken-dialogue) also uses whisper.cpp's speech segment detector and a separate Silero GGML VAD model.
 
 | Dependency           | Status      | Platforms    | What it does                                                                                                                                                   |
 | -------------------- | ----------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -39,7 +45,7 @@ Several entries below exist only for the `subminer` command-line launcher, which
 - **X11 / Xwayland** - for X11 sessions or any other Wayland compositor (uses `xdotool` and `xwininfo`)
 
 ::: warning Wayland support is compositor-specific
-Wayland has no universal API for window positioning - each compositor exposes its own IPC, so SubMiner needs a dedicated backend per compositor. Only Hyprland and Sway have native Wayland backends. If you run a different Wayland compositor (GNOME, KDE Plasma, river, etc.), both mpv **and** SubMiner must run under X11 or Xwayland. The `subminer` launcher handles this automatically when `--backend x11` is set or the X11 backend is auto-detected.
+Wayland has no universal API for window positioning. Each compositor exposes its own IPC, so SubMiner needs a backend per compositor. Only Hyprland and Sway have native Wayland backends. If you run a different Wayland compositor (GNOME, KDE Plasma, river, etc.), both mpv **and** SubMiner must run under X11 or Xwayland. The `subminer` launcher handles this automatically when `--backend x11` is set or the X11 backend is auto-detected.
 :::
 
 <details>
@@ -203,13 +209,13 @@ There is no equivalent setting for ffmpeg: SubMiner invokes it by bare name when
 
 **Optional extras:** [MeCab for Windows](https://taku910.github.io/mecab/#download) with the UTF-8 dictionary improves annotation accuracy; it is not in any package manager, so install it from that page. `xz` is needed only for [TsukiHime](/tsukihime-integration) subtitle downloads and is not packaged by winget or Chocolatey, so use `scoop install main/xz` or download [XZ Utils](https://tukaani.org/xz/) and add its folder to `PATH`.
 
-The `subminer` command-line launcher and its picker tools (`fzf`, `rofi`, `chafa`, `ffmpegthumbnailer`) are Linux/macOS only; on Windows you use the **SubMiner mpv** shortcut instead.
+The launcher's picker tools (`fzf`, `rofi`, `chafa`, `ffmpegthumbnailer`) are for Linux and macOS. On Windows, use the **SubMiner mpv** shortcut for playback or install the optional `subminer` terminal wrapper during setup.
 
 ## 2. Install SubMiner
 
 ### Arch Linux (AUR) {#arch-aur}
 
-Install [`subminer-bin`](https://aur.archlinux.org/packages/subminer-bin) from the AUR. The package includes the SubMiner AppImage and the `subminer` launcher.
+Install [`subminer-bin`](https://aur.archlinux.org/packages/subminer-bin) from the AUR. The package includes the SubMiner AppImage and its launcher wrapper. Bun is included with the app, so the package has no Bun dependency. Install updates through your AUR helper or package manager.
 
 ```bash
 paru -S subminer-bin
@@ -238,9 +244,7 @@ chmod +x ~/.local/bin/SubMiner.AppImage
 ```
 
 ::: tip Launcher install is optional
-First-run setup can install [Bun](https://bun.sh) and the `subminer` command-line launcher for you automatically. You don't need to download the launcher separately.
-
-If you prefer to install it manually, see [manual launcher install](#manual-launcher-install-linux).
+First-run setup can install the `subminer` command-line launcher for you. It uses Bun bundled with the AppImage, so it does not need a separate Bun installation or a Bun entry on `PATH`. The downloaded wrapper works the same way. See [manual launcher install](#manual-launcher-install-linux).
 :::
 
 ### macOS (DMG) {#macos-dmg}
@@ -259,21 +263,20 @@ xattr -d com.apple.quarantine /Applications/SubMiner.app
 2. Enable SubMiner in the list (add it if it does not appear)
 
 ::: tip Launcher install is optional
-First-run setup can install [Bun](https://bun.sh) and the `subminer` command-line launcher for you automatically. You don't need to download the launcher separately.
-
-If you prefer to install it manually, see [manual launcher install](#manual-launcher-install-macos).
+First-run setup can install the `subminer` command-line launcher for you. It uses Bun bundled inside `SubMiner.app`, so it does not need a separate Bun installation or a Bun entry on `PATH`. The downloaded wrapper works the same way. See [manual launcher install](#manual-launcher-install-macos).
 :::
 
-### Windows (Installer) {#windows-installer}
+### Windows (installer) {#windows-installer}
 
 Download the latest installer from [GitHub Releases](https://github.com/ksyasuda/SubMiner/releases/latest):
 
 - `SubMiner-<version>.exe` - installer (recommended)
 - `SubMiner-<version>-win.zip` - portable fallback
+- `subminer.cmd` - optional terminal launcher wrapper
 
 Make sure `mpv.exe` is on your `PATH`, or set `mpv.executablePath` in the config during first-run setup.
 
-### From Source
+### From source
 
 <details>
 <summary><b>Linux</b></summary>
@@ -289,6 +292,8 @@ bun run build:appimage
 ```
 
 Bundled Yomitan is built during `bun run build`.
+
+Source and development commands use Bun installed on your system.
 
 </details>
 
@@ -325,9 +330,13 @@ bun run build:win
 
 </details>
 
-## 3. Launch & First-Run Setup
+### Bundled Bun runtime {#bundled-bun-runtime}
 
-Launch SubMiner and the setup wizard will open automatically:
+Every package includes an unmodified copy of Bun 1.3.5 that runs the command-line launcher. Bun is MIT licensed and statically links JavaScriptCore under LGPL 2.0 and TinyCC under LGPL 2.1. The license texts, third-party notices, and a `SOURCE.md` describing the corresponding source ship inside the app under `resources/bun/licenses` (`SubMiner.app/Contents/Resources/bun/licenses` on macOS). Each GitHub release also publishes `bun-v1.3.5-source.tar.gz` with the matching Bun, WebKit, and dependency sources and instructions for rebuilding Bun against a modified JavaScriptCore.
+
+## 3. Launch and first-run setup
+
+Launch SubMiner and the setup wizard opens on its own:
 
 ```bash
 # Linux (AUR install)
@@ -346,15 +355,17 @@ The setup wizard walks you through:
 
 - **Config file** - auto-created at `~/.config/SubMiner/config.jsonc` (Linux/macOS) or `%APPDATA%\SubMiner\config.jsonc` (Windows)
 - **Yomitan dictionaries** - import at least one dictionary so word lookups work
-- **Bun + `subminer` launcher** _(optional)_ - installs the command-line launcher into a writable PATH directory
+- **`subminer` launcher** _(optional)_ - installs a wrapper into a writable terminal PATH directory. The wrapper uses Bun packaged with the app, with no separate runtime setup. If the included runtime is unavailable, the launcher controls show an error asking you to reinstall SubMiner.
 - **Windows shortcut** _(Windows only)_ - create a `SubMiner mpv` Start Menu/Desktop shortcut
 
-The `Finish setup` button requires a config file and at least one Yomitan dictionary. Bun and the launcher are optional and never block setup completion.
+The `Finish setup` button requires a config file and at least one Yomitan dictionary. The launcher is optional and never blocks setup completion.
+
+On Linux and macOS, setup selects a writable directory already on your terminal `PATH`. If it cannot find one, it creates `~/.local/bin` and shows the `export PATH=...` command to run. Add that command to your shell configuration yourself if you want it in future terminals. Setup never edits shell configuration files. On Windows, setup adds only the wrapper directory to the user `PATH`. Setup stores a custom app location so the wrapper can find an AppImage or app bundle outside the usual install directories.
 
 > [!TIP]
 > You can re-open the setup wizard at any time with `subminer app --setup` or `SubMiner.AppImage --setup`.
 
-### Play a Video
+### Play a video
 
 Once setup is complete:
 
@@ -362,13 +373,13 @@ Once setup is complete:
 subminer video.mkv
 ```
 
-You should see the overlay appear over mpv. If subtitles are loaded, they will appear as interactive text in the overlay.
+The overlay appears over mpv. If a subtitle track loaded, its text shows up in the overlay as hoverable words.
 
 On **Windows**, the recommended way to play video is with the **SubMiner mpv** shortcut created during setup - double-click it, or drag a video file onto it.
 
-### Verify Setup
+### Verify setup
 
-Run the built-in diagnostic to confirm everything is working:
+Run the built-in diagnostic:
 
 ```bash
 subminer doctor
@@ -376,7 +387,7 @@ subminer doctor
 
 This checks for the app binary, mpv, ffmpeg, yt-dlp, fzf, rofi, your config file, and the mpv socket path. Only the app binary and mpv are hard failures; the rest are reported as optional. Fix any hard failures before continuing.
 
-## Anki Setup (Recommended)
+## Anki setup (recommended)
 
 If you plan to mine Anki cards:
 
@@ -398,19 +409,19 @@ subminer --update
 
 SubMiner verifies AppImage, launcher, and Linux support-asset downloads against `SHA256SUMS.txt`. On Linux those support assets include the launcher-managed runtime plugin copy under `SubMiner/plugin/subminer`, the rofi theme at `SubMiner/themes/subminer.rasi`, and the scoped Matroska thumbnailer registration under `SubMiner/thumbnailers`. If the binary is in a protected path, SubMiner shows the exact command to run rather than elevating itself.
 
-The tray "Check for Updates" entry installs the new app automatically on Linux, macOS, and Windows. On Linux it replaces the running `.AppImage` in place via `electron-updater` and refreshes the managed support assets from `subminer-assets.tar.gz`; AppImages managed by a system package (for example the AUR `/opt/SubMiner/SubMiner.AppImage`) are skipped so the package manager stays in charge.
+The tray "Check for Updates" entry installs the new app automatically on Linux, macOS, and Windows. Current `subminer` wrappers remain small bootstraps that locate the installed app and its private runtime. On Linux the updater replaces the running `.AppImage` in place via `electron-updater` and refreshes managed support assets from `subminer-assets.tar.gz`. The next launcher invocation detects the changed AppImage fingerprint and prepares the matching Bun and CLI cache before running the command. App startup also refreshes this payload and migrates recognized writable legacy launchers, including the launcher path an update deferred. AppImages managed by a system package, for example the AUR `/opt/SubMiner/SubMiner.AppImage`, are skipped so the package manager stays in charge.
 
-`subminer -u` also performs the AppImage, launcher, and managed support-asset updates directly from the launcher process, which is useful when SubMiner is not currently running.
+On Linux, `subminer -u` updates the AppImage and managed support assets directly, even when the app is not running. The launcher cache refreshes when the app fingerprint changes. AUR installs remain under package-manager control and should be updated through the package manager.
 
-## How It All Fits Together
+## How it all fits together
 
-SubMiner is an overlay that sits on top of mpv. It connects to mpv through an IPC socket, renders subtitles as interactive text using a bundled Yomitan dictionary engine, and optionally creates Anki flashcards via AnkiConnect.
+SubMiner is an overlay window that sits on top of mpv. It talks to mpv over an IPC socket, renders each subtitle line as interactive text backed by the bundled Yomitan dictionary engine, and writes Anki cards through AnkiConnect when you ask it to.
 
 The `subminer` launcher handles mpv IPC socket setup automatically. If you launch mpv yourself or from another tool, you must pass `--input-ipc-server=/tmp/subminer-socket` (or `\\.\pipe\subminer-socket` on Windows) - without it the overlay starts but subtitles won't appear.
 
-The bundled mpv plugin is injected at runtime automatically - you don't need to install it separately. On Linux, the `subminer` launcher checks for its managed runtime plugin copy, rofi theme, and scoped thumbnailer registration before every mpv-managed launch and installs those support assets from the bundled app automatically if one is missing. For a rofi picker launch, this check runs before the picker opens. It provides in-player keybindings (the `y` chord) for controlling the overlay from within mpv. See [MPV Plugin](/mpv-plugin) for the full keybinding and configuration reference.
+SubMiner injects the bundled mpv plugin at runtime, so there is nothing to install separately. On Linux, the `subminer` launcher checks for its managed runtime plugin copy, rofi theme, and scoped thumbnailer registration before every mpv-managed launch and installs those support assets from the bundled app automatically if one is missing. For a rofi picker launch, this check runs before the picker opens. The plugin adds in-player keybindings (the `y` chord) for driving the overlay from mpv. See [MPV Plugin](/mpv-plugin) for the full keybinding and configuration reference.
 
-## Platform Notes
+## Platform notes
 
 ### macOS
 
@@ -419,9 +430,9 @@ The bundled mpv plugin is injected at runtime automatically - you don't need to 
 - Apple Silicon (M1/M2): `/opt/homebrew/bin/mecab`
 - Intel: `/usr/local/bin/mecab`
 
-Ensure `mecab` is available on your PATH when launching SubMiner.
+`mecab` has to be on your PATH when SubMiner launches.
 
-**Fullscreen:** The overlay should appear correctly in fullscreen. If you encounter issues, check that accessibility permissions are granted.
+**Fullscreen:** The overlay follows mpv into fullscreen. If it does not, accessibility permission is the usual cause.
 
 ### Windows
 
@@ -430,16 +441,13 @@ Ensure `mecab` is available on your PATH when launching SubMiner.
 - IPC socket on Windows is `\\.\pipe\subminer-socket` - do not use `/tmp/subminer-socket`.
 - Config is stored at `%APPDATA%\SubMiner\config.jsonc`.
 
-## Manual Launcher Install
+## Manual launcher install
 
-The `subminer` launcher uses a [Bun](https://bun.sh) shebang, so Bun must be installed. First-run setup can handle this automatically, but if you prefer to do it yourself:
+Current launcher downloads use Bun included in the SubMiner app. The wrapper searches normal install locations and honors `SUBMINER_BINARY_PATH`; Linux also honors `SUBMINER_APPIMAGE_PATH`.
 
 ### Linux {#manual-launcher-install-linux}
 
 ```bash
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
-
 # Download the launcher
 wget https://github.com/ksyasuda/SubMiner/releases/latest/download/subminer -O ~/.local/bin/subminer
 chmod +x ~/.local/bin/subminer
@@ -448,19 +456,22 @@ chmod +x ~/.local/bin/subminer
 ### macOS {#manual-launcher-install-macos}
 
 ```bash
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
-
 # Download the launcher
 sudo curl -fSL https://github.com/ksyasuda/SubMiner/releases/latest/download/subminer -o /usr/local/bin/subminer
 sudo chmod +x /usr/local/bin/subminer
 ```
 
-## Optional Extras
+### Windows {#manual-launcher-install-windows}
 
-### Linux Support Assets
+Download `subminer.cmd` from GitHub Releases and place it in a directory on your user `PATH`. It finds the installed app in the normal per-user or Program Files location. Set `SUBMINER_BINARY_PATH` if you use a portable or custom install.
 
-SubMiner ships the Linux rofi theme, scoped Matroska thumbnailer registration, and launcher-managed runtime plugin copy in `subminer-assets.tar.gz`:
+Launchers installed before the private-runtime change may still be bundled JavaScript with a Bun shebang. Those old files need system Bun until a current app startup migrates a recognized writable launcher, or until you replace one with the current release wrapper.
+
+## Optional extras
+
+### Linux support assets
+
+SubMiner ships the Linux rofi theme, scoped Matroska thumbnailer registration, launcher-managed runtime plugin copy, and the bundled Bun license notices in `subminer-assets.tar.gz`:
 
 ```bash
 wget https://github.com/ksyasuda/SubMiner/releases/latest/download/subminer-assets.tar.gz -O /tmp/subminer-assets.tar.gz

@@ -1,11 +1,24 @@
+import type { MpvInputBindingsSnapshot } from './session-bindings';
 import type {
   KikuFieldGroupingChoice,
   KikuFieldGroupingRequestData,
   KikuMergePreviewRequest,
   KikuMergePreviewResponse,
+  MediaTimingReviewActionResult,
+  MediaTimingReviewOpenPayload,
+  MediaTimingReviewPreviewRequest,
+  MediaTimingReviewResolveRequest,
+  MediaTimingReviewWaveformRequest,
+  MediaTimingReviewWaveformResult,
 } from './anki';
 import type { ChangelogSnapshot } from './changelog';
 import type { OverlayHostedModal } from '../shared/ipc/contracts';
+import type { SubtitleGenerationProgress } from '../shared/subtitle-generation';
+import type { SubtitleGenerationModelId } from '../shared/subtitle-generation-model-catalog';
+import type {
+  SubtitleGenerationResult,
+  SubtitleGenerationStatus,
+} from '../shared/subtitle-generation-ipc';
 import type { ResolvedConfig, ShortcutsConfig } from './config';
 import type {
   CompiledSessionBinding,
@@ -425,6 +438,20 @@ export interface SessionNumericSelectionStartPayload {
 }
 
 export interface ElectronAPI {
+  requestSubtitleGenerationOpen: () => Promise<boolean>;
+  onSubtitleGenerationOpen: (callback: () => void) => void;
+  getSubtitleGenerationStatus: () => Promise<SubtitleGenerationStatus>;
+  selectSubtitleGenerationModel: (
+    model: SubtitleGenerationModelId,
+  ) => Promise<SubtitleGenerationStatus>;
+  startSubtitleGeneration: () => Promise<SubtitleGenerationResult>;
+  downloadSubtitleGenerationModel: () => Promise<SubtitleGenerationResult>;
+  downloadSubtitleGenerationVadModel: () => Promise<SubtitleGenerationResult>;
+  setSubtitleGenerationVadEnabled: (enabled: boolean) => Promise<SubtitleGenerationStatus>;
+  cancelSubtitleGeneration: () => Promise<void>;
+  onSubtitleGenerationProgress: (
+    callback: (progress: SubtitleGenerationProgress) => void,
+  ) => () => void;
   getOverlayLayer: () => 'visible' | 'modal' | null;
   getPathForFile: (file: File) => string;
   onSubtitle: (callback: (data: SubtitleData) => void) => void;
@@ -443,6 +470,7 @@ export interface ElectronAPI {
   getCurrentSubtitleRaw: () => Promise<string>;
   getCurrentSubtitleAss: () => Promise<string>;
   getSubtitleSidebarSnapshot: () => Promise<SubtitleSidebarSnapshot>;
+  copySubtitleSidebarSelection: (text: string) => Promise<void>;
   getSubtitleSidebarOpen: () => Promise<boolean>;
   getPlaybackPaused: () => Promise<boolean | null>;
   onSubtitleAss: (callback: (assText: string) => void) => void;
@@ -456,6 +484,7 @@ export interface ElectronAPI {
   setMecabEnabled: (enabled: boolean) => void;
   sendMpvCommand: (command: (string | number)[]) => void;
   getKeybindings: () => Promise<Keybinding[]>;
+  getMpvInputBindings: () => Promise<MpvInputBindingsSnapshot>;
   getSessionBindings: () => Promise<CompiledSessionBinding[]>;
   getConfiguredShortcuts: () => Promise<Required<ShortcutsConfig>>;
   dispatchSessionAction: (
@@ -519,6 +548,18 @@ export interface ElectronAPI {
   onOpenJimaku: (callback: () => void) => void;
   onOpenTsukihime: (callback: () => void) => void;
   onOpenYoutubeTrackPicker: (callback: (payload: YoutubePickerOpenPayload) => void) => void;
+  onOpenMediaTimingReview: (callback: (payload: MediaTimingReviewOpenPayload) => void) => void;
+  onMediaTimingReviewPreviewEnded: (callback: (reviewId: string) => void) => void;
+  previewMediaTimingReview: (
+    request: MediaTimingReviewPreviewRequest,
+  ) => Promise<MediaTimingReviewActionResult>;
+  getMediaTimingReviewWaveform: (
+    request: MediaTimingReviewWaveformRequest,
+  ) => Promise<MediaTimingReviewWaveformResult>;
+  stopMediaTimingReviewPreview: (reviewId: string) => Promise<MediaTimingReviewActionResult>;
+  resolveMediaTimingReview: (
+    request: MediaTimingReviewResolveRequest,
+  ) => Promise<MediaTimingReviewActionResult>;
   onOpenPlaylistBrowser: (callback: () => void) => void;
   onOpenCharacterDictionaryManager: (callback: () => void) => void;
   onSubtitleSidebarToggle: (callback: () => void) => void;

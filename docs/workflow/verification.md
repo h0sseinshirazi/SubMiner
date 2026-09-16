@@ -23,6 +23,8 @@ Read when: selecting the right verification lane for a change
   there instead of copying them into caller workflows.
 - The reusable gate installs Lua and runs `bun run test:env`, so the shipped mpv
   plugin tests run for every pull request and tagged release.
+  Lua installation uses only the runner's Ubuntu package sources so unrelated
+  third-party repository failures do not block the gate.
 
 ## Default Handoff Gate
 
@@ -50,6 +52,11 @@ bun run docs:build
 - Runtime-compat / compiled behavior: `bun run test:runtime:compat`
 - Stats dashboard UI: `bun run test:stats`
 - Build/release scripts (`scripts/**`): `bun run test:scripts`
+- Packaging: build the platform package, then run `bun run test:package <resources-directory>`.
+  On headless Linux: `xvfb-run -a bun run test:package release/linux-unpacked/resources`.
+  Content checks and informational size reporting run inside electron-builder hooks. See the
+  [release guide](../RELEASING.md#package-contents-and-size-checks) for size reports
+  and the installed-app verification checklist.
 - Coverage for the maintained source lane: `bun run test:coverage:src`
 - Deep/local full gate: default handoff gate above
 

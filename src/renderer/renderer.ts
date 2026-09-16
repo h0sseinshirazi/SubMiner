@@ -41,11 +41,14 @@ import { createAnimeBrowserModal } from './modals/anime-browser.js';
 import { createSessionHelpModal } from './modals/session-help.js';
 import { createChangelogModal } from './modals/changelog.js';
 import { createSubtitleSidebarModal } from './modals/subtitle-sidebar.js';
+import { wireSubtitleSidebarSelection } from './modals/subtitle-sidebar-selection.js';
 import { isControllerInteractionBlocked } from './controller-interaction-blocking.js';
 import { createCharacterDictionaryModal } from './modals/character-dictionary.js';
 import { createRuntimeOptionsModal } from './modals/runtime-options.js';
 import { createSubsyncModal } from './modals/subsync.js';
+import { createSubtitleGenerationModal } from './modals/subtitle-generation.js';
 import { createYoutubeTrackPickerModal } from './modals/youtube-track-picker.js';
+import { createMediaTimingReviewModal } from './modals/media-timing-review.js';
 import { createPositioningController } from './positioning.js';
 import { createOverlayContentMeasurementReporter } from './overlay-content-measurement.js';
 import { syncOverlayMouseIgnoreState } from './overlay-mouse-ignore.js';
@@ -80,6 +83,12 @@ const ctx = {
 
 const modalDescriptors = [
   {
+    id: 'subtitle-generation',
+    isOpen: () => ctx.state.subtitleGenerationModalOpen,
+    close: () => subtitleGenerationModal.close(),
+    suppressesSubtitles: true,
+  },
+  {
     id: 'controller-select',
     isOpen: () => ctx.state.controllerSelectModalOpen,
     close: () => controllerSelectModal.closeControllerSelectModal(),
@@ -113,6 +122,12 @@ const modalDescriptors = [
     id: 'youtube-track-picker',
     isOpen: () => ctx.state.youtubePickerModalOpen,
     close: () => youtubePickerModal.closeYoutubePickerModal(),
+    suppressesSubtitles: true,
+  },
+  {
+    id: 'media-timing-review',
+    isOpen: () => ctx.state.mediaTimingReviewModalOpen,
+    close: () => mediaTimingReviewModal.requestCancel(),
     suppressesSubtitles: true,
   },
   {
@@ -212,6 +227,10 @@ const subsyncModal = createSubsyncModal(ctx, {
   modalStateReader: { isAnyModalOpen },
   syncSettingsModalSubtitleSuppression,
 });
+const subtitleGenerationModal = createSubtitleGenerationModal(ctx, {
+  modalStateReader: { isAnyModalOpen },
+  syncSettingsModalSubtitleSuppression,
+});
 const controllerSelectModal = createControllerSelectModal(ctx, {
   modalStateReader: { isAnyModalOpen },
   syncSettingsModalSubtitleSuppression,
@@ -239,6 +258,8 @@ const subtitleSidebarModal = createSubtitleSidebarModal(ctx, {
     measurementReporter.emitNow();
   },
 });
+const disposeSubtitleSidebarSelection = wireSubtitleSidebarSelection(ctx);
+window.addEventListener('beforeunload', disposeSubtitleSidebarSelection, { once: true });
 const kikuModal = createKikuModal(ctx, {
   modalStateReader: { isAnyModalOpen },
   syncSettingsModalSubtitleSuppression,
@@ -277,14 +298,20 @@ const animeBrowserModal = createAnimeBrowserModal(ctx, {
   dismissOtherModals: () => modalRegistry.dismissOpenExcept('anime-browser'),
   syncSettingsModalSubtitleSuppression,
 });
+const mediaTimingReviewModal = createMediaTimingReviewModal(ctx, {
+  modalStateReader: { isAnyModalOpen },
+  syncSettingsModalSubtitleSuppression,
+});
 const keyboardHandlers = createKeyboardHandlers(ctx, {
   handleRuntimeOptionsKeydown: runtimeOptionsModal.handleRuntimeOptionsKeydown,
   handleCharacterDictionaryKeydown: characterDictionaryModal.handleCharacterDictionaryKeydown,
   handleSubsyncKeydown: subsyncModal.handleSubsyncKeydown,
+  handleSubtitleGenerationKeydown: subtitleGenerationModal.handleKeydown,
   handleKikuKeydown: kikuModal.handleKikuKeydown,
   handleJimakuKeydown: jimakuModal.handleJimakuKeydown,
   handleTsukihimeKeydown: tsukihimeModal.handleTsukihimeKeydown,
   handleYoutubePickerKeydown: youtubePickerModal.handleYoutubePickerKeydown,
+  handleMediaTimingReviewKeydown: mediaTimingReviewModal.handleMediaTimingReviewKeydown,
   handlePlaylistBrowserKeydown: playlistBrowserModal.handlePlaylistBrowserKeydown,
   handleAnimeBrowserKeydown: animeBrowserModal.handleAnimeBrowserKeydown,
   handleControllerSelectKeydown: controllerSelectModal.handleControllerSelectKeydown,
@@ -533,6 +560,9 @@ const recovery = createRendererRecoveryController({
 registerRendererGlobalErrorHandlers(window, recovery);
 
 function registerModalOpenHandlers(): void {
+  window.electronAPI.onSubtitleGenerationOpen(() => {
+    runGuarded('subtitle-generation:open', () => subtitleGenerationModal.open());
+  });
   window.electronAPI.onOpenRuntimeOptions(() => {
     runGuarded('runtime-options:open', () => {
       runtimeOptionsModal.openRuntimeOptionsModal();
@@ -585,6 +615,16 @@ function registerModalOpenHandlers(): void {
   window.electronAPI.onOpenYoutubeTrackPicker((payload) => {
     runGuarded('youtube:picker-open', () => {
       youtubePickerModal.openYoutubePickerModal(payload);
+    });
+  });
+  window.electronAPI.onOpenMediaTimingReview((payload) => {
+    runGuarded('media-timing-review:open', () => {
+      mediaTimingReviewModal.openMediaTimingReviewModal(payload);
+    });
+  });
+  window.electronAPI.onMediaTimingReviewPreviewEnded((reviewId) => {
+    runGuarded('media-timing-review:preview-ended', () => {
+      mediaTimingReviewModal.handlePreviewEnded(reviewId);
     });
   });
   window.electronAPI.onOpenPlaylistBrowser(() => {
@@ -828,11 +868,13 @@ async function init(): Promise<void> {
   jimakuModal.wireDomEvents();
   tsukihimeModal.wireDomEvents();
   youtubePickerModal.wireDomEvents();
+  mediaTimingReviewModal.wireDomEvents();
   playlistBrowserModal.wireDomEvents();
   animeBrowserModal.wireDomEvents();
   kikuModal.wireDomEvents();
   runtimeOptionsModal.wireDomEvents();
   subsyncModal.wireDomEvents();
+  subtitleGenerationModal.wireDomEvents();
   controllerSelectModal.wireDomEvents();
   controllerDebugModal.wireDomEvents();
   sessionHelpModal.wireDomEvents();
@@ -840,6 +882,7 @@ async function init(): Promise<void> {
   subtitleSidebarModal.wireDomEvents();
   characterDictionaryModal.wireDomEvents();
   window.addEventListener('beforeunload', () => {
+    subtitleGenerationModal.dispose();
     subtitleSidebarModal.disposeDomEvents();
     animeBrowserModal.disposeDomEvents();
   });

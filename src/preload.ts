@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
+import { clipboard, contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 import { resolveOverlayLayerFromArgv } from './preload-args';
 import type {
   SubtitleData,
@@ -69,11 +69,18 @@ import type {
   OverlayNotificationEventPayload,
   OverlayNotificationPosition,
   ChangelogSnapshot,
+  MediaTimingReviewActionResult,
+  MediaTimingReviewOpenPayload,
+  MediaTimingReviewPreviewRequest,
+  MediaTimingReviewResolveRequest,
+  MediaTimingReviewWaveformRequest,
 } from './types';
 import { IPC_CHANNELS } from './shared/ipc/contracts';
 import { createAnimeBrowserAPI } from './preload-anime-browser-api';
+import type { SubtitleGenerationProgress } from './shared/subtitle-generation';
 
 const overlayLayer = resolveOverlayLayerFromArgv(process.argv);
+const onSubtitleGenerationOpen = createQueuedIpcListener(IPC_CHANNELS.event.subtitleGenerationOpen);
 
 type EmptyListener = () => void;
 type PayloadedListener<T> = (payload: T) => void;
@@ -184,6 +191,15 @@ const onOpenYoutubeTrackPickerEvent = createQueuedIpcListenerWithPayload<Youtube
   IPC_CHANNELS.event.youtubePickerOpen,
   (payload) => payload as YoutubePickerOpenPayload,
 );
+const onOpenMediaTimingReviewEvent =
+  createQueuedIpcListenerWithPayload<MediaTimingReviewOpenPayload>(
+    IPC_CHANNELS.event.mediaTimingReviewOpen,
+    (payload) => payload as MediaTimingReviewOpenPayload,
+  );
+const onMediaTimingReviewPreviewEndedEvent = createQueuedIpcListenerWithPayload<string>(
+  IPC_CHANNELS.event.mediaTimingReviewPreviewEnded,
+  (payload) => (typeof payload === 'string' ? payload : ''),
+);
 const onOpenPlaylistBrowserEvent = createQueuedIpcListener(IPC_CHANNELS.event.playlistBrowserOpen);
 const onCancelYoutubeTrackPickerEvent = createQueuedIpcListener(
   IPC_CHANNELS.event.youtubePickerCancel,
@@ -250,6 +266,28 @@ const onSecondarySubtitleModeEvent = createLatestValueIpcListenerWithPayload<Sec
 );
 
 const electronAPI: ElectronAPI = {
+  requestSubtitleGenerationOpen: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.requestSubtitleGenerationOpen),
+  onSubtitleGenerationOpen,
+  getSubtitleGenerationStatus: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.getSubtitleGenerationStatus),
+  selectSubtitleGenerationModel: (model) =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.selectSubtitleGenerationModel, model),
+  startSubtitleGeneration: () => ipcRenderer.invoke(IPC_CHANNELS.request.startSubtitleGeneration),
+  downloadSubtitleGenerationModel: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.downloadSubtitleGenerationModel),
+  downloadSubtitleGenerationVadModel: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.downloadSubtitleGenerationVadModel),
+  setSubtitleGenerationVadEnabled: (enabled) =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.setSubtitleGenerationVadEnabled, enabled),
+  cancelSubtitleGeneration: () => ipcRenderer.invoke(IPC_CHANNELS.request.cancelSubtitleGeneration),
+  onSubtitleGenerationProgress: (callback) => {
+    const listener = (_event: IpcRendererEvent, progress: SubtitleGenerationProgress) =>
+      callback(progress);
+    ipcRenderer.on(IPC_CHANNELS.event.subtitleGenerationProgress, listener);
+    return () =>
+      ipcRenderer.removeListener(IPC_CHANNELS.event.subtitleGenerationProgress, listener);
+  },
   getOverlayLayer: () => overlayLayer,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onSubtitle: (callback: (data: SubtitleData) => void) => {
@@ -290,6 +328,10 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.request.getSubtitleSidebarOpen),
   getSubtitleSidebarSnapshot: () =>
     ipcRenderer.invoke(IPC_CHANNELS.request.getSubtitleSidebarSnapshot),
+  copySubtitleSidebarSelection: async (text: unknown) => {
+    if (typeof text !== 'string') throw new TypeError('Subtitle selection must be text.');
+    clipboard.writeText(text);
+  },
   getPlaybackPaused: (): Promise<boolean | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.request.getPlaybackPaused),
   onSubtitleAss: (callback: (assText: string) => void) => {
@@ -335,6 +377,7 @@ const electronAPI: ElectronAPI = {
 
   getKeybindings: (): Promise<Keybinding[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.request.getKeybindings),
+  getMpvInputBindings: () => ipcRenderer.invoke(IPC_CHANNELS.request.getMpvInputBindings),
   getSessionBindings: () => ipcRenderer.invoke(IPC_CHANNELS.request.getSessionBindings),
   getConfiguredShortcuts: (): Promise<Required<ShortcutsConfig>> =>
     ipcRenderer.invoke(IPC_CHANNELS.request.getConfigShortcuts),
@@ -463,6 +506,20 @@ const electronAPI: ElectronAPI = {
   onOpenJimaku: onOpenJimakuEvent,
   onOpenTsukihime: onOpenTsukihimeEvent,
   onOpenYoutubeTrackPicker: onOpenYoutubeTrackPickerEvent,
+  onOpenMediaTimingReview: onOpenMediaTimingReviewEvent,
+  onMediaTimingReviewPreviewEnded: onMediaTimingReviewPreviewEndedEvent,
+  previewMediaTimingReview: (
+    request: MediaTimingReviewPreviewRequest,
+  ): Promise<MediaTimingReviewActionResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.mediaTimingReviewPreview, request),
+  getMediaTimingReviewWaveform: (request: MediaTimingReviewWaveformRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.mediaTimingReviewWaveform, request),
+  stopMediaTimingReviewPreview: (reviewId: string): Promise<MediaTimingReviewActionResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.mediaTimingReviewStopPreview, reviewId),
+  resolveMediaTimingReview: (
+    request: MediaTimingReviewResolveRequest,
+  ): Promise<MediaTimingReviewActionResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.request.mediaTimingReviewResolve, request),
   onOpenPlaylistBrowser: onOpenPlaylistBrowserEvent,
   onOpenCharacterDictionaryManager: onOpenCharacterDictionaryManagerEvent,
   onSubtitleSidebarToggle: onSubtitleSidebarToggleEvent,

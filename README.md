@@ -95,6 +95,10 @@ Browse sibling episode files and the active mpv queue in one overlay modal. Open
     <td>Search and download Japanese subtitles</td>
   </tr>
   <tr>
+    <td><b>Local Subtitle Generation</b></td>
+    <td>Generate Japanese subtitles from local audio in a standalone modal (<code>Ctrl+Shift+G</code>), the sidebar button, or launcher, with progress and optional managed model downloads. Requires whisper.cpp and FFmpeg. Optional Silero speech detection prioritizes dialogue in separately timed passages. <a href="https://docs.subminer.moe/main/subtitle-generation">Setup guide</a></td>
+  </tr>
+  <tr>
     <td><b>TsukiHime</b></td>
     <td>Search and download subtitles extracted from anime releases, with Japanese and secondary-language tabs (<code>Ctrl+Shift+T</code>) — no API key, requires <code>xz</code> on your <code>PATH</code></td>
   </tr>
@@ -197,7 +201,9 @@ wget https://github.com/ksyasuda/SubMiner/releases/latest/download/SubMiner.AppI
  && chmod +x ~/.local/bin/SubMiner.AppImage
 ```
 
-The AppImage is all you need. The optional `subminer` command-line launcher runs on [Bun](https://bun.sh), and first-run setup can install both for you. To grab it manually instead, install Bun first, then:
+The AppImage is all you need. First-run setup can install the optional `subminer` command-line launcher. Every current launcher uses Bun included with the app, so you do not need Bun installed or on `PATH`.
+
+You can also download the launcher wrapper directly:
 
 ```bash
 wget https://github.com/ksyasuda/SubMiner/releases/latest/download/subminer -O ~/.local/bin/subminer \
@@ -218,6 +224,8 @@ Download the latest DMG from [GitHub Releases](https://github.com/ksyasuda/SubMi
 
 Download and run the latest installer (`.exe`) from [GitHub Releases](https://github.com/ksyasuda/SubMiner/releases/latest).
 
+For terminal use, download `subminer.cmd`. It locates the installed app and uses its private Bun runtime.
+
 </details>
 
 <details>
@@ -229,14 +237,14 @@ See the [build-from-source guide](https://docs.subminer.moe/installation#from-so
 
 ### 2. Launch & Set Up
 
-Run SubMiner and the first-run setup wizard will guide you through importing Yomitan dictionaries and optionally installing the `subminer` command-line launcher.
+Run the installed app and the first-run setup wizard will guide you through importing Yomitan dictionaries and optionally installing the `subminer` command-line launcher. Setup records a custom app location when needed, and the wrapper runs with the app's private Bun runtime.
 
 ```bash
 # Linux
-subminer app --setup
+~/.local/bin/SubMiner.AppImage --setup
 
-# macOS — open SubMiner.app, or:
-subminer app --setup
+# macOS
+open -a SubMiner --args --setup
 ```
 
 On **Windows**, just run `SubMiner.exe` and the setup will open automatically on first launch.
@@ -269,6 +277,7 @@ SubMiner builds on the work of these open-source projects:
 | [Aniyomi](https://github.com/aniyomiorg/aniyomi)                                            | Anime extension API and data model the anime browser targets                 |
 | [asbplayer](https://github.com/killergerbah/asbplayer)                                      | Inspiration for subtitle sidebar and logic for YouTube subtitle parsing      |
 | [Bee's Character Dictionary](https://github.com/bee-san/Japanese_Character_Name_Dictionary) | Character name recognition in subtitles                                      |
+| [Bun](https://github.com/oven-sh/bun)                                                       | Bundled runtime for the `subminer` command-line launcher                |
 | [GameSentenceMiner](https://github.com/bpwhelan/GameSentenceMiner)                          | Inspiration for Electron overlay with Yomitan integration                    |
 | [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim)                          | Jellyfin integration                                                         |
 | [Jimaku.cc](https://jimaku.cc)                                                              | Japanese subtitle search and downloads                                       |
@@ -287,3 +296,5 @@ downloaded from its upstream releases at runtime rather than
 bundled or redistributed here; its bundles carry their own dependencies, including a JRE and
 GPL-3.0 NewPipe Extractor. SubMiner includes none of them and talks to the bridge
 over its own HTTP protocol. It ships no extensions or repositories by default.
+
+Release packages also bundle an unmodified copy of [Bun](https://github.com/oven-sh/bun), which is MIT licensed and statically links JavaScriptCore (LGPL 2.0) and TinyCC (LGPL 2.1). Its license texts and third-party notices ship inside the app under `resources/bun/licenses`, and each release publishes `bun-v1.3.5-source.tar.gz` with the corresponding source. See [Bundled Bun runtime](https://docs.subminer.moe/installation#bundled-bun-runtime).

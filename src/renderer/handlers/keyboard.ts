@@ -1,5 +1,6 @@
 import type { CompiledSessionBinding, PrimarySubMode, ShortcutsConfig } from '../../types';
 import type { RendererContext } from '../context';
+import { createMpvInputForwarding } from './mpv-input-forwarding';
 import {
   YOMITAN_POPUP_HIDDEN_EVENT,
   YOMITAN_POPUP_SHOWN_EVENT,
@@ -14,10 +15,12 @@ export function createKeyboardHandlers(
     handleRuntimeOptionsKeydown: (e: KeyboardEvent) => boolean;
     handleCharacterDictionaryKeydown: (e: KeyboardEvent) => boolean;
     handleSubsyncKeydown: (e: KeyboardEvent) => boolean;
+    handleSubtitleGenerationKeydown?: (e: KeyboardEvent) => boolean;
     handleKikuKeydown: (e: KeyboardEvent) => boolean;
     handleJimakuKeydown: (e: KeyboardEvent) => boolean;
     handleTsukihimeKeydown: (e: KeyboardEvent) => boolean;
     handleYoutubePickerKeydown: (e: KeyboardEvent) => boolean;
+    handleMediaTimingReviewKeydown: (e: KeyboardEvent) => boolean;
     handlePlaylistBrowserKeydown: (e: KeyboardEvent) => boolean;
     handleAnimeBrowserKeydown?: (e: KeyboardEvent) => boolean;
     handleControllerSelectKeydown: (e: KeyboardEvent) => boolean;
@@ -55,6 +58,11 @@ export function createKeyboardHandlers(
     timeout: ReturnType<typeof setTimeout> | null;
   } | null = null;
   let mpvInputForwardingListenersInstalled = false;
+  let keyboardConfigLoaded = false;
+  const importedMpvBindings = createMpvInputForwarding({
+    load: () => window.electronAPI.getMpvInputBindings(),
+    send: (command) => window.electronAPI.sendMpvCommand(command),
+  });
 
   const CHORD_MAP = new Map<
     string,
@@ -131,6 +139,7 @@ export function createKeyboardHandlers(
     ctx.state.sessionBindingMap = new Map(
       bindings.map((binding) => [keyEventToStringFromBinding(binding), binding]),
     );
+    void importedMpvBindings.refresh();
   }
 
   function keyEventToStringFromBinding(binding: CompiledSessionBinding): string {
@@ -436,7 +445,10 @@ export function createKeyboardHandlers(
   }
 
   function clearNativeSubtitleSelection(): void {
-    window.getSelection()?.removeAllRanges();
+    const selection = window.getSelection();
+    if (!selection?.anchorNode || ctx.dom.subtitleRoot.contains(selection.anchorNode)) {
+      selection?.removeAllRanges();
+    }
     ctx.dom.subtitleRoot.classList.remove('has-selection');
   }
 
@@ -981,6 +993,7 @@ export function createKeyboardHandlers(
     ]);
     updateSessionBindings(sessionBindings);
     updateConfiguredShortcuts(shortcuts, statsToggleKey, markWatchedKey);
+    keyboardConfigLoaded = true;
     syncKeyboardTokenSelection();
   }
 
@@ -1031,6 +1044,18 @@ export function createKeyboardHandlers(
       return;
     }
     mpvInputForwardingListenersInstalled = true;
+    const lateScriptRefresh = setTimeout(() => {
+      void importedMpvBindings.refresh();
+    }, 1500);
+    window.addEventListener('focus', () => {
+      void importedMpvBindings.refresh();
+    });
+    window.addEventListener('blur', importedMpvBindings.releaseAll);
+    window.addEventListener('beforeunload', () => {
+      clearTimeout(lateScriptRefresh);
+      importedMpvBindings.dispose();
+    });
+    document.addEventListener('keyup', importedMpvBindings.keyup, true);
 
     const subtitleMutationObserver = new MutationObserver(() => {
       syncKeyboardTokenSelection();
@@ -1079,6 +1104,16 @@ export function createKeyboardHandlers(
     );
 
     document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (ctx.state.subtitleGenerationModalOpen) {
+        options.handleSubtitleGenerationKeydown?.(e);
+        return;
+      }
+
+      if (ctx.state.mediaTimingReviewModalOpen) {
+        options.handleMediaTimingReviewKeydown(e);
+        return;
+      }
+
       if (isKeyboardDrivenModeToggle(e) && ctx.platform.isModalLayer) {
         e.preventDefault();
         handleKeyboardModeToggleRequested();
@@ -1246,7 +1281,18 @@ export function createKeyboardHandlers(
       if (binding) {
         e.preventDefault();
         dispatchSessionBinding(binding);
+        return;
       }
+      if (
+        keyboardConfigLoaded &&
+        !ctx.state.playlistBrowserModalOpen &&
+        !ctx.state.youtubePickerModalOpen &&
+        !ctx.state.subtitleSidebarModalOpen &&
+        !ctx.state.yomitanPopupVisible &&
+        !isYomitanPopupVisible(document) &&
+        !isInteractiveTarget(e.target)
+      )
+        importedMpvBindings.keydown(e);
     });
 
     document.addEventListener('mousedown', (e: MouseEvent) => {

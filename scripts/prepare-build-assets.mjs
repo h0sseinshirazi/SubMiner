@@ -34,10 +34,6 @@ function copyAssets(sourceDir, outputDir, label, stylesheets = ['style.css']) {
   for (const stylesheet of stylesheets) {
     copyFile(path.join(sourceDir, stylesheet), path.join(outputDir, stylesheet));
   }
-  fs.cpSync(path.join(rendererSourceDir, 'fonts'), path.join(outputDir, 'fonts'), {
-    recursive: true,
-    force: true,
-  });
   process.stdout.write(`Staged ${label} assets in ${outputDir}\n`);
 }
 
@@ -116,6 +112,10 @@ function buildMacosHelper() {
 }
 
 function main() {
+  fs.cpSync(path.join(rendererSourceDir, 'fonts'), path.join(repoRoot, 'dist', 'fonts'), {
+    recursive: true,
+    force: true,
+  });
   copyRendererAssets();
   copySettingsAssets();
   copySyncUiAssets();

@@ -56,6 +56,7 @@ const SESSION_SHORTCUT_ACTIONS: Array<{
   { key: 'openRuntimeOptions', actionId: 'openRuntimeOptions' },
   { key: 'openJimaku', actionId: 'openJimaku' },
   { key: 'openTsukihime', actionId: 'openTsukihime' },
+  { key: 'openSubtitleGeneration', actionId: 'openSubtitleGeneration' },
   { key: 'openSessionHelp', actionId: 'openSessionHelp' },
   { key: 'openControllerSelect', actionId: 'openControllerSelect' },
   { key: 'openControllerDebug', actionId: 'openControllerDebug' },
@@ -211,7 +212,7 @@ function parseAccelerator(
   };
 }
 
-function parseDomKeyString(
+export function parseSessionBindingKey(
   key: string,
   platform: PlatformKeyModel,
 ): { key: SessionKeySpec | null; message?: string } {
@@ -439,7 +440,7 @@ export function compileSessionBindings(input: CompileSessionBindingsInput): {
   }
 
   if (statsToggleKey) {
-    const parsed = parseDomKeyString(statsToggleKey, input.platform);
+    const parsed = parseSessionBindingKey(statsToggleKey, input.platform);
     if (!parsed.key) {
       warnings.push({
         kind: 'unsupported',
@@ -466,7 +467,7 @@ export function compileSessionBindings(input: CompileSessionBindingsInput): {
   }
 
   if (statsMarkWatchedKey) {
-    const parsed = parseDomKeyString(statsMarkWatchedKey, input.platform);
+    const parsed = parseSessionBindingKey(statsMarkWatchedKey, input.platform);
     if (!parsed.key) {
       warnings.push({
         kind: 'unsupported',
@@ -494,7 +495,7 @@ export function compileSessionBindings(input: CompileSessionBindingsInput): {
 
   input.keybindings.forEach((binding, index) => {
     if (!binding.command) return;
-    const parsed = parseDomKeyString(binding.key, input.platform);
+    const parsed = parseSessionBindingKey(binding.key, input.platform);
     if (!parsed.key) {
       warnings.push({
         kind: 'unsupported',

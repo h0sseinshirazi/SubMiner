@@ -1,4 +1,5 @@
 import type { AnkiConnectConfig, WordCardKind } from './anki';
+import type { SubtitleGenerationConfig } from '../shared/subtitle-generation';
 import type {
   AiConfig,
   AiFeatureConfig,
@@ -125,6 +126,7 @@ export interface ShortcutsConfig {
   openRuntimeOptions?: string | null;
   openJimaku?: string | null;
   openTsukihime?: string | null;
+  openSubtitleGeneration?: string | null;
   openSessionHelp?: string | null;
   openControllerSelect?: string | null;
   openControllerDebug?: string | null;
@@ -150,6 +152,7 @@ export interface Config {
   shortcuts?: RawShortcutsConfig;
   secondarySub?: SecondarySubConfig;
   subsync?: SubsyncConfig;
+  subtitleGeneration?: Partial<SubtitleGenerationConfig>;
   startupWarmups?: StartupWarmupsConfig;
   subtitleStyle?: SubtitleStyleConfig;
   subtitleSidebar?: SubtitleSidebarConfig;
@@ -250,6 +253,7 @@ export interface ResolvedConfig {
       syncAnimatedImageToWordAudio: boolean;
       normalizeAudio: boolean;
       mirrorMpvVolume: boolean;
+      reviewTiming: boolean;
       audioPadding: number;
       fallbackDuration: number;
       maxMediaDuration: number;
@@ -299,6 +303,7 @@ export interface ResolvedConfig {
   shortcuts: Required<ShortcutsConfig>;
   secondarySub: Required<SecondarySubConfig>;
   subsync: Required<SubsyncConfig>;
+  subtitleGeneration: SubtitleGenerationConfig;
   startupWarmups: {
     lowPowerMode: boolean;
     mecab: boolean;

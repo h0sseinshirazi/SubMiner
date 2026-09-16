@@ -1,14 +1,22 @@
-# Launcher Script
+# Launcher script
 
-The `subminer` launcher is an all-in-one script that handles video selection, mpv startup, and overlay management. It is the recommended way to use SubMiner on Linux and macOS because it guarantees mpv is launched with the correct IPC socket and SubMiner defaults. It's a Bun script distributed as a release asset alongside the AppImage and DMG.
+The `subminer` launcher handles video selection, mpv startup, and overlay management in one script. It guarantees mpv starts with the right IPC socket and SubMiner defaults. On Windows, the **SubMiner mpv** shortcut remains the recommended playback entry point.
+
+The launcher is a small wrapper around the CLI bundled in the desktop app. It locates a normal SubMiner installation, or uses `SUBMINER_BINARY_PATH` when you set a custom executable. Linux also accepts `SUBMINER_APPIMAGE_PATH`. First-run setup records the selected app location for the wrapper. You do not need Bun installed or on `PATH`; only the directory containing `subminer` needs to be on `PATH`.
+
+On macOS, the wrapper runs Bun and the CLI directly from `SubMiner.app/Contents/Resources`. On Windows, `subminer.cmd` stages a versioned private Bun copy under `%LOCALAPPDATA%\SubMiner\launcher-runtime/<version>` and runs the CLI from the current app. Keeping the executable outside the app avoids locking an updater-owned file while a launcher is running. Old runtime versions are removed when no running launcher is using them.
+
+On Linux, the first launch caches Bun and its matching CLI and license files under `${XDG_DATA_HOME:-~/.local/share}/SubMiner/launcher`. Later launches make one `stat` call against the AppImage and run the cache without starting Electron. A missing cache or changed app fingerprint rebuilds it. App startup also refreshes the managed payload after an update.
+
+The downloaded `subminer` and `subminer.cmd` release assets use the same private runtime flow. Older launcher scripts that were installed before this change cannot update their own code retroactively and still need system Bun until the app migrates them at startup or you download a current wrapper.
 
 ::: tip Windows users
 On Windows, the recommended way to launch playback is the **SubMiner mpv** shortcut created during first-run setup - double-click it, drag a file onto it, or run `SubMiner.exe --launch-mpv` from a terminal. See [Windows mpv Shortcut](/usage#windows-mpv-shortcut) for details.
 :::
 
-## Video Picker
+## Video picker
 
-When you run `subminer` without specifying a file, it opens an interactive video picker. By default it uses **fzf** in the terminal; pass `-R` to use **rofi** instead.
+Run `subminer` with no file and it opens an interactive picker. That is **fzf** in the terminal by default, or **rofi** with `-R`.
 
 ### fzf (default)
 
@@ -66,7 +74,7 @@ Override with the `SUBMINER_ROFI_THEME` environment variable:
 SUBMINER_ROFI_THEME=/path/to/custom-theme.rasi subminer -R
 ```
 
-## Watch History
+## Watch history
 
 `subminer -H` (or `--history`) browses your local watch history, sourced from the immersion tracker database. It works with both pickers: fzf by default, rofi with `-R -H`.
 
@@ -87,7 +95,7 @@ After an episode ends or you close mpv, the launcher returns to an action menu f
 
 Series whose directories are not currently accessible (e.g. an unmounted network share) are hidden from the list. Watch history requires the immersion tracker database (`immersionTracking.dbPath`, default `<config dir>/immersion.sqlite`), which SubMiner populates during playback.
 
-## Sync Between Machines
+## Sync between machines
 
 `subminer sync <host>` merges immersion stats and watch history between two machines over SSH, so both end up with the union of sessions, lifetime totals, vocabulary counts, daily/monthly charts, and `--history` entries. `<host>` is anything `ssh` accepts (`user@hostname` or an ssh config alias); SubMiner must be installed on both machines at the same version. The sync engine runs only inside the app (`SubMiner --sync-cli sync ...`): the sync window spawns it that way, `subminer sync` is a thin proxy that forwards to the installed app, and the remote side is found automatically whether it has the launcher or just the app. The command-line launcher is optional everywhere.
 
@@ -101,9 +109,15 @@ subminer sync macbook --check          # test SSH + remote SubMiner without sync
 subminer sync --ui                     # open the sync window (also in the tray menu)
 ```
 
-How it works: each side takes a consistent snapshot of its database (`VACUUM INTO`), the snapshots are exchanged over `scp`, and each machine merges the other's snapshot into its own database. The merge is an insert-only union keyed on stable identifiers (session UUIDs, video keys, series title keys, word/kanji identity), so it is safe to re-run at any time. Syncing twice changes nothing, and nothing is ever overwritten or summed twice. Lifetime totals and rollup charts are updated incrementally, so history older than the session retention window is preserved on both sides.
+How it works: each side takes a consistent snapshot of its database (`VACUUM INTO`), the snapshots are exchanged over SSH, and each machine merges the other's snapshot into its own database. The merge is an insert-only union keyed on stable identifiers (session UUIDs, video keys, series title keys, word/kanji identity), so it is safe to re-run at any time. Syncing twice changes nothing, and nothing is ever overwritten or summed twice. Lifetime totals and rollup charts are updated incrementally, so history older than the session retention window is preserved on both sides.
+
+On macOS and Linux, sync automatically uses compressed `rsync` transfers when compatible `rsync` commands are available on both machines. The last successfully received snapshot supplies matching blocks for later transfers, so unchanged data can be reused without sending it again. Only unmatched data needs to cross the connection, with compression reducing it further. Without a cached snapshot, sync sends a full compressed snapshot. Windows endpoints and machines without compatible `rsync` use compressed `scp` automatically. No extra configuration is required, and both methods work across different networks, including Tailscale connections.
 
 For a one-way transfer, `--push` snapshots the local database and merges it into the host without changing the local database. `--pull` snapshots the host and merges it into the local database without changing the host. These modes add missing data; they do not delete destination-only data or make the destination an exact mirror.
+
+Each rsync transfer explicitly uses SSH and has a 30-minute time limit. A timed-out transfer stops the sync before merging the incomplete snapshot.
+
+Transfers write separate temporary files and verify the reconstructed content before merging. Cached comparison snapshots are preserved throughout the transfer. After a successful rsync sync, each receiver keeps one snapshot per peer/database identity in `sync-transfer-cache/` under its SubMiner config directory. This uses roughly one database-sized file per identity; deleting that cache is safe and only makes the next sync transfer more data. Missing or unwritable caches do not prevent syncing. Older peers without the cache helper still support compressed transfers, but cannot retain the upload comparison copy.
 
 Command-line sync defaults to a cold-start safety check: close SubMiner (and stop the background stats daemon with `subminer stats -s`) on both machines before running it, or pass `--force`. Syncs started from the Sync window use live mode automatically, including scheduled auto-syncs while SubMiner or playback is active. SQLite WAL provides a consistent snapshot, the transactional merge serializes with live writes, and each machine's unfinished session is excluded from the transfer; that session syncs normally after it finishes. The mpv safety check requires a live socket connection, so a stale socket file left after mpv exits does not block command-line sync. Both machines must be on the same SubMiner version; otherwise, the sync aborts on a stats schema mismatch.
 
@@ -122,7 +136,7 @@ Unfinished sessions (a crash mid-playback) are skipped until the app finalizes t
 
 `subminer sync <host> --check` verifies a host without touching any data: it probes the SSH connection, locates SubMiner on the remote (launcher or app binary), and reports its version. `--json` switches any sync mode to machine-readable NDJSON progress output (this is what the sync window consumes).
 
-`sync --make-temp` creates a restricted temporary directory and prints its path; `sync --remove-temp <dir>` removes one created by that command. They are internal SSH transfer helpers, exposed for compatibility but normally invoked only by sync itself. `SubMiner --sync-cli sync ...` is the packaged app's headless compatibility entrypoint; use `SubMiner --sync-cli --help` for its sync-specific help. The `subminer sync` launcher command selects this entrypoint automatically and runs AppImages in Node-only mode, so remote sync does not require a graphical session.
+`sync --make-temp` creates a restricted temporary directory and prints its path; `sync --remove-temp <dir>` removes one created by that command. The internal `--transfer-cache <key>` option seeds the temporary directory from a previous received snapshot when creating it, or saves the received snapshot before removing it after a successful sync. Keys are 64-character lowercase hexadecimal identifiers. These are internal SSH transfer helpers, exposed for compatibility but normally invoked only by sync itself. `SubMiner --sync-cli sync ...` is the packaged app's headless compatibility entrypoint; use `SubMiner --sync-cli --help` for its sync-specific help. The `subminer sync` launcher command selects this entrypoint automatically and runs AppImages in Node-only mode, so remote sync does not require a graphical session.
 
 ### Sync window
 
@@ -135,7 +149,7 @@ Unfinished sessions (a crash mid-playback) are skipped until the app finalizes t
 
 Hosts with **Auto-sync** enabled are synced in the background on a configurable interval (default every 60 minutes), including during active playback; results surface as overlay notifications. The unfinished playback session is skipped until a later sync sees it finalized. Host bookkeeping lives in `<config dir>/sync-hosts.json`.
 
-## Common Commands
+## Common commands
 
 ```bash
 subminer video.mkv                      # play a specific file (managed launches auto-start the visible overlay by default)
@@ -159,6 +173,7 @@ subminer stats -b                       # start background stats daemon
 | `subminer stats rebuild` / `backfill`      | Rebuild or backfill rollup data                                                                   |
 | `subminer doctor`                          | Dependency + config + socket diagnostics (`--refresh-known-words` refreshes the known-word cache) |
 | `subminer settings`                        | Open the SubMiner settings window                                                                 |
+| `subminer generate-subs [video]`           | Generate [Japanese subtitles](/usage#generate-japanese-subtitles-locally) locally                 |
 | `subminer logs -e`                         | Export a sanitized local-date log ZIP and print its path                                          |
 | `subminer config path`                     | Print active config file path                                                                     |
 | `subminer config show`                     | Print active config contents                                                                      |

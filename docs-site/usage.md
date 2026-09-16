@@ -1,6 +1,6 @@
 # Usage
 
-## Quick Start
+## Quick start
 
 Play a video with SubMiner:
 
@@ -10,7 +10,9 @@ subminer video.mkv
 
 On **Windows**, use the **SubMiner mpv** shortcut created during first-run setup - double-click it, or drag a video file onto it.
 
-That's the simplest way to get started. The `subminer` launcher handles mpv, the IPC socket, and the overlay automatically.
+That is the whole setup. The `subminer` launcher starts mpv, opens the IPC socket, and brings up the overlay.
+
+Every current launcher wrapper uses the Bun runtime included with the SubMiner app. This includes setup installs, release downloads, `make install`, and the AUR package. You only need the wrapper directory on your terminal `PATH`. Building SubMiner from source still requires Bun on the development machine.
 
 > [!IMPORTANT]
 > SubMiner requires the bundled Yomitan instance to have at least one dictionary imported for lookups to work.
@@ -36,17 +38,17 @@ If you want sentence, audio, and screenshot fields on your Anki cards, add this 
 Field names must match a field on your Anki note type. Matching is case-insensitive (an exact match wins, then a lowercase comparison), but the spelling must otherwise match. See [Anki Integration](/anki-integration) for the full reference.
 :::
 
-## How It Works
+## How it works
 
-When you launch SubMiner, it wires up mpv and the overlay for you:
+Launching SubMiner wires up mpv and the overlay for you:
 
 1. SubMiner starts the overlay app in the background
 2. mpv runs with an **IPC socket** at `/tmp/subminer-socket` - a small local channel two programs use to talk to each other, so the overlay can ask mpv what subtitle is on screen right now
 3. The overlay connects and subscribes to subtitle changes
 
-From there, subtitles render as interactive, hoverable word spans and you mine cards directly from the overlay. For the overlay anatomy and the full mining loop - word lookup, card creation, annotations - see [Mining Workflow](/mining-workflow).
+Subtitles then render as hoverable word spans, and you mine cards straight from the overlay. [Mining Workflow](/mining-workflow) covers the overlay layout, word lookup, card creation, and annotations.
 
-### Ways to Launch
+### Ways to launch
 
 | Approach                            | Use when                                                                                                                               | How                                                                   |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -54,11 +56,11 @@ From there, subtitles render as interactive, hoverable word spans and you mine c
 | **SubMiner mpv shortcut** (Windows) | The recommended Windows entry point. Created during first-run setup, launches mpv with SubMiner's defaults.                            | Double-click, drag a file onto it, or run `SubMiner.exe --launch-mpv` |
 | **mpv plugin** (all platforms)      | Bundled and injected at runtime. Provides `y` chord keybindings for controlling the overlay from within mpv. No manual install needed. | Automatic when using the launcher or shortcut                         |
 
-The mpv plugin is always available - it's bundled with SubMiner and injected at runtime. On Linux, normal `subminer` playback auto-installs the launcher-managed runtime plugin copy from the bundled app if that managed copy is missing, so no separate plugin install is needed for standard launcher usage. If you launch mpv yourself (without the launcher), pass `--input-ipc-server=/tmp/subminer-socket` in your mpv config for the overlay to connect.
+The mpv plugin is always available, because SubMiner bundles it and injects it at runtime. On Linux, normal `subminer` playback auto-installs the launcher-managed runtime plugin copy from the bundled app if that managed copy is missing, so no separate plugin install is needed for standard launcher usage. If you launch mpv yourself (without the launcher), pass `--input-ipc-server=/tmp/subminer-socket` in your mpv config for the overlay to connect.
 
 ## Commands
 
-These are the commands you will actually use day to day. The full inventory of subcommands and flags lives in [Launcher Script](/launcher-script#subcommands).
+These are the ones you will use day to day. [Launcher Script](/launcher-script#subcommands) has every subcommand and flag.
 
 ```bash
 subminer video.mkv                # Play a specific file
@@ -71,16 +73,51 @@ subminer stats                    # Open the immersion stats dashboard
 subminer doctor                   # Check dependencies, config, and the mpv socket
 subminer settings                 # Open the SubMiner settings window
 subminer anime                    # Open the anime browser window
+subminer generate-subs video.mkv   # Generate Japanese subtitles from local audio
 subminer app --setup              # Re-open first-run setup
 subminer -u                       # Check for updates
 ```
 
-On **Windows** there is no `subminer` launcher. Use the **SubMiner mpv** shortcut for playback (see [Windows mpv Shortcut](#windows-mpv-shortcut)), and run `SubMiner.exe` directly for everything else.
+On **Windows**, first-run setup can install the optional `subminer` terminal wrapper. Use the **SubMiner mpv** shortcut for playback (see [Windows mpv Shortcut](#windows-mpv-shortcut)), or use `subminer` and `SubMiner.exe` from a terminal.
 
 Two flags are worth knowing early:
 
 - `-a/--args` passes extra arguments straight to mpv, for example `subminer --args "--ao=alsa --volume=80" video.mkv`.
 - `--log-level debug` turns on verbose logging when something is not working.
+
+### Generate Japanese subtitles locally
+
+`generate-subs` transcribes local audio with whisper.cpp, saves a timed Japanese SRT file,
+and loads it into mpv if that same media file is still playing, clearing the previous subtitle
+delay. It also works with no running
+SubMiner app or mpv instance when you provide a file path. Omit the path to use the current
+mpv file and selected audio track.
+
+```bash
+subminer generate-subs video.mkv --download-model
+subminer generate-subs video.mkv --model-path ~/models/ggml-medium.bin
+subminer generate-subs --model medium --download-model
+subminer generate-subs video.mkv --audio-stream 2 --output ~/Subs/video.ja.srt
+```
+
+Install `whisper-cli` from whisper.cpp, `ffmpeg`, and `ffprobe`, or configure their paths in
+`subtitleGeneration.whisperPath`, `subtitleGeneration.ffmpegPath`, and `subtitleGeneration.ffprobePath`.
+Set `subtitleGeneration.modelPath` in settings to reuse an existing whisper.cpp model.
+With no external path, SubMiner uses `subtitleGeneration.managedModel` and stores downloaded
+models under `models/whisper` beside its config file. `--model` selects an official multilingual model, including available quantized variants, for
+this invocation and overrides a configured external model path. Run `subminer generate-subs --help`
+for accepted names. See [model selection](/subtitle-generation#choosing-a-model) for accuracy and speed guidance.
+
+Downloads only happen when you pass `--download-model` or choose the download action in the
+generation modal. The launcher reports each stage and percentages when available. Press Ctrl+C
+to cancel. `--audio-stream` takes an absolute ffprobe stream index. When you provide a file
+path without that flag, generation uses a Japanese audio track when tagged, falling back
+to the first audio track. With no file path, mpv must have an identifiable selected audio
+track, or you must provide `--audio-stream`.
+
+Generated files include Whisper's native timing. Speech recognition can make mistakes,
+especially over music or overlapping dialogue, so check the wording before mining. Existing
+output files are preserved. See [configuration](/configuration) for the generation settings.
 
 <details>
 <summary><b>Less common launcher commands</b></summary>
@@ -153,7 +190,7 @@ Once Jellyfin is configured, the tray menu includes `Jellyfin Discovery` for sta
 
 The tray menu also includes `View Changelog`, which opens the in-app changelog modal. It fetches the changelog from the newest published release, so you see release notes for versions newer than the one you run; if the download fails it falls back to the changelog bundled with your install and says so. Versions in the current `0.x` line are expanded by default and older lines are folded, matching this site's [Changelog](/changelog). A badge marks the version you have installed, and newer versions are tagged `New`. The same modal opens from the `What's New` button on the update-available overlay notification.
 
-### Logging and App Mode
+### Logging and app mode
 
 - `--log-level` controls logger verbosity.
 - `--dev` and `--debug` are app/dev-mode switches; they are not log-level aliases.
@@ -167,7 +204,7 @@ The tray menu also includes `View Changelog`, which opens the in-app changelog m
 - Use both when needed, for example `SubMiner.AppImage --start --dev --log-level debug` (or `SubMiner.exe --start --dev --log-level debug` on Windows).
 - `--playback-feedback <text>` (also `--playback-feedback=<text>`) sends a non-empty text string through the playback-feedback route used for recording/playback prompts. For example: `SubMiner.AppImage --playback-feedback "your feedback"`.
 
-### Windows mpv Shortcut
+### Windows mpv shortcut
 
 First-run setup creates the config file, then requires Yomitan dictionaries before it can finish.
 
@@ -187,17 +224,19 @@ You can use it three ways:
 
 This flow requires `mpv.exe` to be discoverable. Leave `mpv.executablePath` blank to auto-discover from `PATH`, or set it to the full `mpv.exe` path if mpv is installed elsewhere. `SUBMINER_MPV_PATH` is still honored as a fallback.
 
-### Launcher Subcommands
+### Launcher subcommands
 
 The launcher groups related work under subcommands: `jellyfin` (aliased `jf`), `stats`, `sync`, `dictionary` (aliased `dict`), `texthooker`, `doctor`, `settings`, `config`, `mpv`, `logs`, and `app` (aliased `bin`) for passing arguments straight to the SubMiner binary.
 
 Every subcommand has its own help page, for example `subminer jellyfin -h`. See [Launcher Script - Subcommands](/launcher-script#subcommands) for the full table, and [Sync Between Machines](/launcher-script#sync-between-machines) for the SSH stats/history sync.
 
+Sync selects compressed transfers automatically and reuses cached snapshots when rsync is available. Its `--transfer-cache <key>` option belongs to the internal `--make-temp` / `--remove-temp` helpers; normal `subminer sync <host>` commands manage it for you. See [Sync Between Machines](/launcher-script#sync-between-machines) for cache storage and compatibility details.
+
 A _texthooker_ is a web page that displays the current subtitle line as selectable text, so browser-based dictionary extensions and other tools can read along with playback.
 
-### First-Run Setup
+### First-run setup
 
-Setup popup appears on first launch, or when setup has not been completed.
+The setup window opens on first launch and on any later launch where setup never finished.
 
 You can also open it manually:
 
@@ -211,7 +250,8 @@ Setup flow:
 - config file: create the default config directory and prefer `config.jsonc`
 - legacy plugin cleanup: remove detected older global SubMiner mpv plugin files if present (the bundled plugin is injected at runtime automatically)
 - Yomitan shortcut: open bundled Yomitan settings directly from the setup window
-- dictionary check: ensure at least one bundled Yomitan dictionary is available, unless an external Yomitan profile is configured
+- dictionary check: confirm at least one bundled Yomitan dictionary is present, unless an external Yomitan profile is configured
+- command line launcher: optionally install or reinstall the managed `subminer` wrapper. Reinstall it to migrate an older launcher or after moving a macOS or Windows app install.
 - Windows: optionally create or remove `SubMiner mpv` Start Menu/Desktop shortcuts (`SubMiner.exe --launch-mpv`)
 - Windows: optionally set `mpv.executablePath` if `mpv.exe` is not on `PATH`
 - refresh: re-check dictionary state without restarting
@@ -227,7 +267,7 @@ AniList character dictionary auto-sync (optional):
 Use subcommands for Jellyfin workflows (`subminer jellyfin ...`).
 Top-level launcher flags like `--jellyfin-*` are intentionally rejected.
 
-### MPV Profile Example (mpv.conf)
+### MPV profile example (mpv.conf)
 
 `subminer` passes the following MPV options directly on launch by default:
 
@@ -266,13 +306,13 @@ secondary-sub-visibility=no
 
 ### Yomitan setup
 
-SubMiner includes a bundled Yomitan extension for overlay word lookup. This bundled extension is separate from any Yomitan browser extension you may have installed.
+SubMiner bundles its own Yomitan extension for overlay lookups. It is a separate install from any Yomitan you run in a browser, with its own dictionaries and settings.
 
 For SubMiner overlay lookups to work, open Yomitan settings (`subminer app --yomitan` or `SubMiner.AppImage --yomitan`) and import at least one dictionary in the bundled Yomitan instance.
 
-If you also use Yomitan in a browser, configure that browser profile separately; it does not inherit dictionaries or settings from the bundled instance.
+If you also use Yomitan in a browser, set that profile up separately. It inherits nothing from the bundled instance.
 
-### YouTube Playback
+### YouTube playback
 
 `subminer` accepts direct URLs (for example, YouTube links) and `ytsearch:` targets.
 For YouTube playback, SubMiner resolves subtitle selection during startup while mpv is paused: it auto-selects the default primary subtitle track plus a best-effort secondary track, then resumes when primary subtitles are ready.
@@ -290,7 +330,7 @@ Notes:
 
 For local video files, SubMiner uses the same config-driven language priorities to auto-select the primary and secondary subtitle tracks from internal and external subtitle sources.
 
-## Live Config Reload
+## Live config reload
 
 While SubMiner is running, it watches your active config file and applies safe updates automatically.
 
@@ -307,16 +347,16 @@ Live-updated settings include:
 - `mpv.aniskipEnabled`, `mpv.aniskipButtonKey`
 - `stats.toggleKey`, `stats.markWatchedKey`
 - `youtube.primarySubLanguages`
-- most `ankiConnect.*` settings (including `ankiConnect.ai`)
+- most `ankiConnect.*` settings
 
 Invalid config edits are rejected; SubMiner keeps the previous valid runtime config and shows an error notification.
 For restart-required sections, SubMiner shows a restart-needed notification.
 
-## Controller Support
+## Controller support
 
-SubMiner supports gamepad/controller input for couch-friendly usage via the Chrome Gamepad API. Controller input drives the overlay while keyboard-only mode is enabled.
+SubMiner reads gamepads through the Chrome Gamepad API, so you can mine from the couch. The controller drives the overlay while keyboard-only mode is on.
 
-### Getting Started
+### Getting started
 
 1. Connect a controller before or after launching SubMiner.
 2. Set `controller.enabled` to `true` in your config.
@@ -328,7 +368,7 @@ SubMiner supports gamepad/controller input for couch-friendly usage via the Chro
 
 By default SubMiner uses the first connected controller after controller support is enabled. `Alt+C` opens the controller config modal, where you can save the preferred controller and remap bindings inline per controller. The reset button beside each edit pencil restores that binding to its built-in default for the selected controller. `Alt+Shift+C` opens the live debug modal with raw axes/button values for non-standard pads. Both modals stay closed while `controller.enabled` is false, and both shortcuts can be changed through `shortcuts.openControllerSelect` and `shortcuts.openControllerDebug`.
 
-### Default Button Mapping
+### Default button mapping
 
 | Button                  | Action                                  |
 | ----------------------- | --------------------------------------- |
@@ -342,9 +382,9 @@ By default SubMiner uses the first connected controller after controller support
 | `Select` / `Minus`      | Quit mpv                                |
 | `L2` / `R2`             | Unbound (available for custom bindings) |
 
-Note: the default quit binding uses gamepad button index 6. Pads that follow the W3C standard gamepad layout report L2 as index 6 (Select is index 8), so on those controllers the quit action may fire on L2 instead - use `Alt+C` learn mode to remap it for your pad.
+The default quit binding uses gamepad button index 6. Pads that follow the W3C standard layout report L2 as index 6 and Select as index 8, so on those controllers quit fires on L2 instead. Remap it with `Alt+C` learn mode.
 
-### Analog Controls
+### Analog controls
 
 | Input                 | Action                                        |
 | --------------------- | --------------------------------------------- |
@@ -353,7 +393,7 @@ Note: the default quit binding uses gamepad button index 6. Pads that follow the
 | Right stick vertical  | Jump through Yomitan popup                    |
 | D-pad                 | Fallback for stick navigation when configured |
 
-Learn mode ignores already-held inputs and waits for the next fresh button press or axis direction, which avoids accidental captures when you open the modal mid-input.
+Learn mode ignores inputs you are already holding and waits for the next fresh press or axis push, so opening the modal mid-input does not capture whatever your thumb was on.
 
 All button and axis mappings are configurable under the `controller` config block. Learned remaps are saved under `controller.profiles` for the selected controller id. See [Configuration - Controller Support](/configuration#controller-support) for the full options.
 
@@ -380,7 +420,7 @@ The changelog modal (tray > `View Changelog`) works the same way: it renders ove
 
 Hovering over subtitle text pauses mpv by default; leaving resumes it. Yomitan popups also pause playback by default. Set `subtitleStyle.autoPauseVideoOnHover: false` or `subtitleStyle.autoPauseVideoOnYomitanPopup: false` to disable either behavior.
 
-### Drag-and-Drop
+### Drag-and-drop
 
 - Drop video files onto the overlay to replace current playback.
 - Hold `Shift` while dropping to append to the playlist instead.

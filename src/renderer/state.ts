@@ -64,6 +64,8 @@ export type RendererState = {
   youtubePickerSecondaryTrackId: string | null;
   youtubePickerStatus: string;
 
+  mediaTimingReviewModalOpen: boolean;
+
   kikuModalOpen: boolean;
   kikuSelectedCard: 1 | 2;
   kikuOriginalData: KikuDuplicateCardInfo | null;
@@ -85,6 +87,7 @@ export type RendererState = {
   characterDictionaryStatus: string;
 
   subsyncModalOpen: boolean;
+  subtitleGenerationModalOpen: boolean;
   subsyncSubtitleTracks: SubsyncSubtitleTrack[];
   subsyncSubmitting: boolean;
 
@@ -195,6 +198,8 @@ export function createRendererState(): RendererState {
     youtubePickerSecondaryTrackId: null,
     youtubePickerStatus: '',
 
+    mediaTimingReviewModalOpen: false,
+
     kikuModalOpen: false,
     kikuSelectedCard: 1,
     kikuOriginalData: null,
@@ -216,6 +221,7 @@ export function createRendererState(): RendererState {
     characterDictionaryStatus: '',
 
     subsyncModalOpen: false,
+    subtitleGenerationModalOpen: false,
     subsyncSubtitleTracks: [],
     subsyncSubmitting: false,
 

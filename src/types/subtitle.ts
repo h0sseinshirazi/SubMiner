@@ -227,6 +227,7 @@ export interface SubtitleData {
 }
 
 export interface SubtitleSidebarSnapshot {
+  sourceKey: string | null;
   cues: SubtitleCue[];
   currentTimeSec?: number | null;
   currentSubtitle: {
@@ -243,6 +244,8 @@ export interface SubtitleMiningContext {
   startTime: number;
   endTime: number;
   capturedAtMs?: number;
+  /** Explicit generator padding. Confirmed timing-review ranges set this to zero. */
+  mediaPaddingSeconds?: number;
 }
 
 export interface SubtitleHoverTokenPayload {

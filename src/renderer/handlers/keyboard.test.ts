@@ -6,6 +6,7 @@ import test from 'node:test';
 import { createKeyboardHandlers } from './keyboard.js';
 import { createRendererState } from '../state.js';
 import type { CompiledSessionBinding } from '../../types';
+import type { MpvInputBindingsSnapshot } from '../../types/session-bindings';
 import { DEFAULT_KEYBINDINGS, SPECIAL_COMMANDS } from '../../config/definitions';
 import { compileSessionBindings } from '../../core/services/session-bindings';
 import type { ConfiguredShortcuts } from '../../core/utils/shortcut-config';
@@ -91,6 +92,7 @@ function createEmptyShortcuts(): ConfiguredShortcuts {
     openRuntimeOptions: null,
     openJimaku: null,
     openTsukihime: null,
+    openSubtitleGeneration: null,
     openSessionHelp: null,
     openControllerSelect: null,
     openControllerDebug: null,
@@ -115,6 +117,10 @@ function installKeyboardTestGlobals() {
   const sessionActions: Array<{ actionId: string; payload?: unknown }> = [];
   const interactionActivations: string[] = [];
   let sessionBindings: CompiledSessionBinding[] = [];
+  let getMpvInputBindings: () => Promise<MpvInputBindingsSnapshot> = async () => ({
+    keys: [],
+    blockedKeys: [],
+  });
   let getSessionBindingsImpl: () => Promise<CompiledSessionBinding[]> = async () => sessionBindings;
   let playbackPausedResponse: boolean | null = false;
   let statsToggleKey = 'Backquote';
@@ -238,6 +244,7 @@ function installKeyboardTestGlobals() {
       },
       electronAPI: {
         getKeybindings: async () => [],
+        getMpvInputBindings: () => getMpvInputBindings(),
         getSessionBindings: () => getSessionBindingsImpl(),
         getConfiguredShortcuts: async () => configuredShortcuts,
         sendMpvCommand: (command: Array<string | number>) => {
@@ -308,6 +315,7 @@ function installKeyboardTestGlobals() {
     altKey?: boolean;
     shiftKey?: boolean;
     repeat?: boolean;
+    target?: unknown;
   }): void {
     const listeners = documentListeners.get('keydown') ?? [];
     const keyboardEvent = {
@@ -319,7 +327,7 @@ function installKeyboardTestGlobals() {
       shiftKey: event.shiftKey ?? false,
       repeat: event.repeat ?? false,
       preventDefault: () => {},
-      target: null,
+      target: event.target ?? null,
     };
     for (const listener of listeners) {
       listener(keyboardEvent);
@@ -369,6 +377,7 @@ function installKeyboardTestGlobals() {
   }
 
   function restore() {
+    dispatchWindowEvent('beforeunload');
     Object.defineProperty(globalThis, 'window', { configurable: true, value: previousWindow });
     Object.defineProperty(globalThis, 'document', { configurable: true, value: previousDocument });
     Object.defineProperty(globalThis, 'MutationObserver', {
@@ -421,6 +430,9 @@ function installKeyboardTestGlobals() {
     setConfiguredShortcuts: (value: typeof configuredShortcuts) => {
       configuredShortcuts = value;
     },
+    setGetMpvInputBindings: (value: typeof getMpvInputBindings) => {
+      getMpvInputBindings = value;
+    },
     setSessionBindings: (value: CompiledSessionBinding[]) => {
       sessionBindings = value;
     },
@@ -452,6 +464,7 @@ function createKeyboardHandlerHarness() {
   const testGlobals = installKeyboardTestGlobals();
   const subtitleRootClassList = createClassList();
   const subtitleContainerClassList = createClassList();
+  let mediaTimingReviewKeydownCount = 0;
   let controllerSelectKeydownCount = 0;
   let openControllerSelectCount = 0;
   let openControllerDebugCount = 0;
@@ -494,6 +507,10 @@ function createKeyboardHandlerHarness() {
     handleKikuKeydown: () => false,
     handleJimakuKeydown: () => false,
     handleTsukihimeKeydown: () => false,
+    handleMediaTimingReviewKeydown: () => {
+      mediaTimingReviewKeydownCount += 1;
+      return false;
+    },
     handleControllerSelectKeydown: () => {
       controllerSelectKeydownCount += 1;
       return true;
@@ -523,6 +540,7 @@ function createKeyboardHandlerHarness() {
     ctx,
     handlers,
     testGlobals,
+    mediaTimingReviewKeydownCount: () => mediaTimingReviewKeydownCount,
     controllerSelectKeydownCount: () => controllerSelectKeydownCount,
     openControllerSelectCount: () => openControllerSelectCount,
     openControllerDebugCount: () => openControllerDebugCount,
@@ -1368,6 +1386,29 @@ test('keyboard mode: controller select modal handles arrow keys before yomitan p
   }
 });
 
+test('media timing review modal handles keys before later modal handlers', async () => {
+  const {
+    ctx,
+    testGlobals,
+    handlers,
+    mediaTimingReviewKeydownCount,
+    controllerSelectKeydownCount,
+  } = createKeyboardHandlerHarness();
+
+  try {
+    await handlers.setupMpvInputForwarding();
+    ctx.state.mediaTimingReviewModalOpen = true;
+    ctx.state.controllerSelectModalOpen = true;
+
+    testGlobals.dispatchKeydown({ key: 'ArrowDown', code: 'ArrowDown' });
+
+    assert.equal(mediaTimingReviewKeydownCount(), 1);
+    assert.equal(controllerSelectKeydownCount(), 0);
+  } finally {
+    testGlobals.restore();
+  }
+});
+
 test('keyboard mode: playlist browser modal handles arrow keys before yomitan popup', async () => {
   const { ctx, testGlobals, handlers, playlistBrowserKeydownCount } =
     createKeyboardHandlerHarness();
@@ -1546,6 +1587,28 @@ test('session binding: Ctrl+Alt+S dispatches subsync action locally', async () =
 
     assert.deepEqual(testGlobals.sessionActions, [
       { actionId: 'triggerSubsync', payload: undefined },
+    ]);
+  } finally {
+    testGlobals.restore();
+  }
+});
+
+test('session binding: Ctrl+Shift+G dispatches subtitle generation with the sidebar closed', async () => {
+  const { handlers, testGlobals } = createKeyboardHandlerHarness();
+  try {
+    await handlers.setupMpvInputForwarding();
+    handlers.updateSessionBindings([
+      {
+        sourcePath: 'shortcuts.openSubtitleGeneration',
+        originalKey: 'Ctrl+Shift+G',
+        key: { code: 'KeyG', modifiers: ['ctrl', 'shift'] },
+        actionType: 'session-action',
+        actionId: 'openSubtitleGeneration',
+      },
+    ]);
+    testGlobals.dispatchKeydown({ key: 'G', code: 'KeyG', ctrlKey: true, shiftKey: true });
+    assert.deepEqual(testGlobals.sessionActions, [
+      { actionId: 'openSubtitleGeneration', payload: undefined },
     ]);
   } finally {
     testGlobals.restore();
@@ -1831,6 +1894,29 @@ test('keyboard mode: popup hidden after mode off clears stale selected token hig
     assert.equal(wordNodes[1]?.classList.contains('keyboard-selected'), false);
   } finally {
     ctx.state.keyboardDrivenModeEnabled = false;
+    testGlobals.restore();
+  }
+});
+
+test('Yomitan popup dismissal and subtitle updates preserve selection outside the overlay subtitle', async () => {
+  const { ctx, handlers, testGlobals } = createKeyboardHandlerHarness();
+  let cleared = false;
+  try {
+    Object.defineProperty(window, 'getSelection', {
+      configurable: true,
+      value: () => ({
+        anchorNode: {},
+        removeAllRanges: () => {
+          cleared = true;
+        },
+      }),
+    });
+    Object.assign(ctx.dom.subtitleRoot, { contains: () => false });
+    await handlers.setupMpvInputForwarding();
+    testGlobals.dispatchWindowEvent(YOMITAN_POPUP_HIDDEN_EVENT);
+    handlers.syncKeyboardTokenSelection();
+    assert.equal(cleared, false);
+  } finally {
     testGlobals.restore();
   }
 });
@@ -2252,6 +2338,69 @@ test('mark-watched keybinding does not send mpv commands when no active session'
     assert.equal(testGlobals.markActiveVideoWatchedCalls() > 0, true);
     const newMpvCommands = testGlobals.mpvCommands.slice(beforeMpvCount);
     assert.deepEqual(newMpvCommands, []);
+  } finally {
+    testGlobals.restore();
+  }
+});
+
+test('discovered mpv keys only run after SubMiner controls and stay out of session help', async () => {
+  const { handlers, testGlobals, ctx } = createKeyboardHandlerHarness();
+  try {
+    testGlobals.setGetMpvInputBindings(async () => ({
+      keys: ['r', 'SPACE', 'y', 'v'],
+      blockedKeys: [],
+    }));
+    testGlobals.setSessionBindings([
+      {
+        sourcePath: 'keybindings[0].key',
+        originalKey: 'Space',
+        key: { code: 'Space', modifiers: [] },
+        actionType: 'mpv-command',
+        command: ['cycle', 'pause'],
+      },
+    ]);
+    await handlers.setupMpvInputForwarding();
+    await wait(0);
+    testGlobals.dispatchKeydown({ key: 'r', code: 'KeyR' });
+    testGlobals.dispatchKeydown({ key: ' ', code: 'Space' });
+    assert.deepEqual(testGlobals.mpvCommands, [
+      ['keydown', 'r'],
+      ['cycle', 'pause'],
+    ]);
+    assert.equal(ctx.state.sessionBindings.length, 1);
+    testGlobals.dispatchWindowEvent('blur');
+    const before = testGlobals.mpvCommands.length;
+    ctx.state.playlistBrowserModalOpen = true;
+    testGlobals.dispatchKeydown({ key: 'r', code: 'KeyR' });
+    ctx.state.playlistBrowserModalOpen = false;
+    ctx.state.yomitanPopupVisible = true;
+    testGlobals.setPopupVisible(true);
+    testGlobals.dispatchKeydown({ key: 'r', code: 'KeyR' });
+    ctx.state.yomitanPopupVisible = false;
+    testGlobals.setPopupVisible(false);
+    testGlobals.dispatchKeydown({ key: 'r', code: 'KeyR', target: { closest: () => ({}) } });
+    assert.equal(testGlobals.mpvCommands.length, before);
+  } finally {
+    testGlobals.restore();
+  }
+});
+
+test('stalled mpv discovery does not delay configured overlay controls', async () => {
+  const { handlers, testGlobals } = createKeyboardHandlerHarness();
+  try {
+    testGlobals.setGetMpvInputBindings(() => new Promise(() => {}));
+    testGlobals.setSessionBindings([
+      {
+        sourcePath: 'keybindings[0].key',
+        originalKey: 'Space',
+        key: { code: 'Space', modifiers: [] },
+        actionType: 'mpv-command',
+        command: ['cycle', 'pause'],
+      },
+    ]);
+    await handlers.setupMpvInputForwarding();
+    testGlobals.dispatchKeydown({ key: ' ', code: 'Space' });
+    assert.deepEqual(testGlobals.mpvCommands, [['cycle', 'pause']]);
   } finally {
     testGlobals.restore();
   }

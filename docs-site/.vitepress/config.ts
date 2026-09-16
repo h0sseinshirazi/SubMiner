@@ -370,6 +370,7 @@ const sidebar: DefaultTheme.SidebarItem[] = [
       { text: 'YouTube', link: '/youtube-integration' },
       { text: 'Anime Browser', link: '/anime-browser' },
       { text: 'Jimaku', link: '/jimaku-integration' },
+      { text: 'Subtitle Generation', link: '/subtitle-generation' },
       { text: 'TsukiHime', link: '/tsukihime-integration' },
       { text: 'AniList', link: '/anilist-integration' },
       { text: 'AniSkip', link: '/aniskip-integration' },
