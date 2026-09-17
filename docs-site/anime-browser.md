@@ -273,10 +273,20 @@ use, its version, and who updates it.
 Only the copy SubMiner downloaded is ever updated by SubMiner. A package-manager
 install or an `anime.bridgeDir` belongs to whoever put it there.
 
-SubMiner records the release it installed and, once the bridge is running,
-asks GitHub for the newest one. When upstream has published a newer release,
-the banner reads "Extension bridge v… is installed; v… is available" with an
-**Update to v…** button. Clicking it downloads the new release beside the
+Once the bridge is running, SubMiner asks GitHub for the newest release and
+compares it with the installed version, including package-manager installs and
+custom bridge directories. When upstream has published a newer release, the
+banner reads "Extension bridge v… is installed; v… is available".
+
+For an AUR bridge, the banner directs you to update `mangatan-extension-server`
+through your AUR helper, for example `paru -S mangatan-extension-server`, then
+restart SubMiner. Custom installations get a reminder to use their package
+manager or original installation method. These notices have no in-app update
+button. The check uses upstream releases, so AUR packaging may lag behind the
+notice. External installations with an unreadable version do not show a notice.
+
+For SubMiner's own copy, the banner includes an **Update to v…** button.
+Clicking it downloads the new release beside the
 running bridge, so a failed download changes nothing, then stops the bridge,
 swaps the directories, and starts it again. The restart takes a few seconds
 and kills the stream of an episode that is playing, the same as when the
@@ -329,6 +339,12 @@ SubMiner waits until mpv actually configures a video output before reporting
 success. If mpv gives up instead — a dead host, an undecodable stream — the
 browser shows mpv's error rather than pretending playback started (a failed
 load leaves no mpv window, because the player idles windowless).
+
+Failed requests appear in a dismissible panel at the bottom of the browser.
+It explains the failed action and suggests a next step. Expand **Technical
+details** to read the bridge or mpv error when reporting a problem. Missing
+bridge APIs and incomplete extension data have distinct explanations; an
+update may be needed, but a compatible release may not yet be available.
 
 Choosing **Queue** resolves the episode and appends the playable stream to mpv's
 own playlist immediately, while its subtitle tracks cache in the background.

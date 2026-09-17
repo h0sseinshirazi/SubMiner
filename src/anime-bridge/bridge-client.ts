@@ -45,7 +45,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 /** The readiness probe is a local health check; it should answer at once. */
 const CAPABILITIES_TIMEOUT_MS = 5_000;
 
-/** The bridge reports extension failures as HTTP 200 with an error body. */
+/** Extension failures may arrive as HTTP errors or HTTP 200 with an error body. */
 export class BridgeExtensionError extends Error {
   readonly code?: number;
   constructor(message: string, code?: number) {
@@ -194,7 +194,12 @@ export class AnimeBridgeClient {
     }
 
     if (!response.ok) {
-      throw new Error(`Anime bridge ${method} failed (${response.status}).`);
+      const body: unknown = await response.json().catch(() => null);
+      const detail = extensionErrorMessage(body);
+      throw new BridgeExtensionError(
+        `Anime bridge ${method} failed (${response.status}).${detail ? ` ${detail}` : ''}`,
+        response.status,
+      );
     }
 
     const returnedId = response.headers.get(EXTENSION_ID_HEADER)?.trim();
@@ -234,12 +239,20 @@ export class AnimeBridgeClient {
 }
 
 function assertNoExtensionError(body: unknown, method: string): void {
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) return;
-  const error = (body as { error?: unknown }).error;
-  if (typeof error !== 'string') return;
-  const code = (body as { code?: unknown }).code;
+  const error = extensionErrorMessage(body);
+  if (error === null) return;
+  const code = body !== null && typeof body === 'object' && 'code' in body ? body.code : undefined;
   throw new BridgeExtensionError(
     `Anime bridge ${method} failed: ${error}`,
     typeof code === 'number' ? code : undefined,
   );
+}
+
+/** Only expose the bridge's JSON error field, never an HTML error page or stack object. */
+function extensionErrorMessage(body: unknown): string | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  if (!('error' in body) || typeof body.error !== 'string') return null;
+  const message = body.error.replace(/\s+/g, ' ').trim();
+  if (!message) return null;
+  return message.length > 2_000 ? `${message.slice(0, 1_999)}…` : message;
 }

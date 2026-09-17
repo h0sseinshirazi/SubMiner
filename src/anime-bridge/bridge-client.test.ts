@@ -168,6 +168,50 @@ test('searchAnime sends a 1-based page and returns the page payload', async () =
   assert.equal(page.animes?.length, 1);
 });
 
+test('HTTP failures preserve the bridge error and status for diagnosis', async () => {
+  for (const detail of [
+    "'java.lang.Object eu.kanade.tachiyomi.animesource.online.AnimeHttpSource.getHosterList(eu.kanade.tachiyomi.animesource.model.SEpisode, kotlin.coroutines.Continuation)'",
+    'lateinit property url has not been initialized',
+  ]) {
+    const { fetchImpl } = stubFetch(
+      () => new Response(JSON.stringify({ error: detail, code: 500 }), { status: 500 }),
+    );
+    const client = new AnimeBridgeClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl });
+    await assert.rejects(
+      () => client.getVideoList(source, '/episode/301'),
+      (error: unknown) => {
+        assert.ok(error instanceof BridgeExtensionError);
+        assert.equal(error.code, 500);
+        assert.equal(error.message, `Anime bridge getVideoList failed (500). ${detail}`);
+        return true;
+      },
+    );
+  }
+});
+
+test('non-JSON and invalid bridge errors keep the HTTP fallback without exposing response bodies', async () => {
+  for (const body of ['<html>Proxy error</html>', '', '{"error":{}}', '{"error":"  "}', 'null']) {
+    const { fetchImpl } = stubFetch(() => new Response(body, { status: 502 }));
+    const client = new AnimeBridgeClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl });
+    await assert.rejects(() => client.getAnimeDetails(source, '/anime/1'), {
+      message: 'Anime bridge getDetailsAnime failed (502).',
+    });
+  }
+});
+
+test('bridge diagnostics normalize whitespace and bound long messages', async () => {
+  const { fetchImpl } = stubFetch(
+    () =>
+      new Response(JSON.stringify({ error: `  Missing field\n\t${'x'.repeat(3_000)}` }), {
+        status: 500,
+      }),
+  );
+  const client = new AnimeBridgeClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl });
+  await assert.rejects(() => client.getAnimeDetails(source, '/anime/1'), {
+    message: `Anime bridge getDetailsAnime failed (500). ${`Missing field ${'x'.repeat(3_000)}`.slice(0, 1_999)}…`,
+  });
+});
+
 test('getEpisodeList wraps the anime url in animeData', async () => {
   const { fetchImpl, calls } = stubFetch(() => jsonResponse([{ name: 'Episode 1', url: '/ep/1' }]));
   const client = new AnimeBridgeClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl });

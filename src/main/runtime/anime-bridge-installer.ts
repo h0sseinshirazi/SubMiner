@@ -178,16 +178,16 @@ async function locateLatestBundle(options: BridgeReleaseOptions): Promise<Bundle
 }
 
 /**
- * The newest release a managed install could move to, or null when it is
- * current or is not SubMiner's to update. An install whose version cannot be
- * read is offered the newest release: re-downloading is the way back to a
- * known state. Network errors propagate; the caller decides how loudly.
+ * The newest release an install could move to, or null when it is current.
+ * An unreadable managed install is offered the newest release so it can be
+ * repaired; an unreadable system install cannot be compared. Network errors
+ * propagate; the caller decides how loudly.
  */
 export async function findBridgeUpdate(
   install: Pick<AnimeBrowserBridgeInstall, 'origin' | 'version'>,
   options: BridgeReleaseOptions = {},
 ): Promise<string | null> {
-  if (install.origin !== 'managed') return null;
+  if (install.origin === 'system' && install.version === null) return null;
   const latest = await locateLatestBundle(options);
   if (install.version === null) return latest.tagName;
   return compareBundleVersions(latest.tagName, install.version) > 0 ? latest.tagName : null;

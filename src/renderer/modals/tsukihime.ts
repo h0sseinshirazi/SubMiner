@@ -458,9 +458,11 @@ export function createTsukihimeModal(
 
     secondaryLanguagesReady = loadSecondaryLanguages();
 
+    const searchToken = activeSearchToken;
     window.electronAPI
       .getJimakuMediaInfo()
       .then((info: JimakuMediaInfo) => {
+        if (searchToken !== activeSearchToken || !ctx.state.tsukihimeModalOpen) return;
         ctx.dom.tsukihimeTitleInput.value = info.title || '';
         ctx.dom.tsukihimeSeasonInput.value = info.season ? String(info.season) : '';
         ctx.dom.tsukihimeEpisodeInput.value = info.episode ? String(info.episode) : '';
@@ -474,6 +476,7 @@ export function createTsukihimeModal(
         }
       })
       .catch(() => {
+        if (searchToken !== activeSearchToken || !ctx.state.tsukihimeModalOpen) return;
         setTsukihimeStatus('Failed to load media info.', true);
       });
   }

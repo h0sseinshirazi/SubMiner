@@ -419,6 +419,73 @@
   color: var(--ok);
 }
 
+.statusbar:has(.request-error:not(.hidden)) {
+  border-top-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  padding-block: 14px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.request-error {
+  border-left: 3px solid var(--danger);
+  padding-left: 14px;
+  color: var(--text);
+}
+
+.request-error-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.request-error-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--danger);
+}
+
+.request-error-heading button {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.request-error p {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.request-error-guidance {
+  color: var(--muted);
+  max-width: 90ch;
+}
+
+.request-error-details {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.request-error-details summary {
+  cursor: pointer;
+  width: fit-content;
+  font-size: 11px;
+}
+
+.request-error-details pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--ctp-crust);
+  color: var(--text);
+  font: 11px/1.65 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* ---------- scrollbars ---------- */
 
 ::-webkit-scrollbar {

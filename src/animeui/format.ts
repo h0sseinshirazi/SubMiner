@@ -1,5 +1,6 @@
 import type {
   AnimeBrowserBridgeInstall,
+  AnimeBrowserBridgeState,
   AnimeBrowserSearchResult,
   AnimeBrowserSource,
   InstalledExtensionView,
@@ -46,4 +47,22 @@ export function describeBridgeInstall(install: AnimeBrowserBridgeInstall | null)
     return `M-Extension-Server ${version} in ${install.dir}, downloaded by SubMiner. ${install.updateAvailable} is available from the banner above.`;
   }
   return `M-Extension-Server ${version} in ${install.dir}, downloaded by SubMiner. SubMiner checks this installation for updates after startup.`;
+}
+
+/** Update notices are informational for bridges installed outside SubMiner. */
+export function describeBridgeUpdate(state: AnimeBrowserBridgeState): {
+  message: string;
+  buttonLabel: string | null;
+} | null {
+  const install = state.install;
+  if (state.stage !== 'ready' || !install || install.updateAvailable === null) return null;
+  const message = `Extension bridge ${install.version ?? 'of unknown version'} is installed; ${install.updateAvailable} is available.`;
+  if (install.origin === 'managed') {
+    return { message, buttonLabel: `Update to ${install.updateAvailable}` };
+  }
+  const instruction =
+    install.dir.replace(/\/+$/, '') === '/usr/share/mangatan/extension_server'
+      ? 'Update mangatan-extension-server through your AUR helper (for example: paru -S mangatan-extension-server), then restart SubMiner.'
+      : 'Update your bridge through your package manager or its original installation method, then restart SubMiner.';
+  return { message: `${message} ${instruction}`, buttonLabel: null };
 }

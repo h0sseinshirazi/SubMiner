@@ -218,12 +218,12 @@ export function createAnimeBrowserRuntime(deps: AnimeBrowserRuntimeDeps) {
   }
 
   /**
-   * Ask upstream whether a managed install is behind, after the bridge is up
+   * Ask upstream whether the install is behind, after the bridge is up
    * so a slow or failed GitHub call never delays a search. The answer lands
    * in `install.updateAvailable` and is re-broadcast on the current state.
    */
   async function checkForBridgeUpdate(handle: SidecarHandle): Promise<void> {
-    if (install === null || install.origin !== 'managed') return;
+    if (install === null) return;
     try {
       const latest = await deps.checkBridgeUpdate(install);
       // The bridge may have been restarted or updated while we waited.

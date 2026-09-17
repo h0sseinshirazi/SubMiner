@@ -182,7 +182,7 @@ test('with nothing installed the newest release is downloaded and marked', async
   assert.ok(!(await readdir(managed)).some((entry) => entry.endsWith('.zip')));
 });
 
-test('findBridgeUpdate offers the newest release only to a managed install that is behind it', async () => {
+test('findBridgeUpdate compares both managed and system installs with upstream', async () => {
   const { calls, options } = fakeUpstream();
 
   assert.equal(await findBridgeUpdate({ origin: 'managed', version: 'v1.0.6.0' }, options), LATEST);
@@ -192,9 +192,12 @@ test('findBridgeUpdate offers the newest release only to a managed install that 
   assert.equal(await findBridgeUpdate({ origin: 'managed', version: null }, options), LATEST);
   assert.equal(calls.length, 4);
 
-  // A system install is pacman's, so upstream is not even asked.
-  assert.equal(await findBridgeUpdate({ origin: 'system', version: 'v1.0.0.0' }, options), null);
-  assert.equal(calls.length, 4);
+  assert.equal(await findBridgeUpdate({ origin: 'system', version: 'v1.0.0.0' }, options), LATEST);
+  assert.equal(await findBridgeUpdate({ origin: 'system', version: LATEST }, options), null);
+  assert.equal(await findBridgeUpdate({ origin: 'system', version: 'v1.0.7.0' }, options), null);
+  // An unknown external version is not evidence that an update is needed.
+  assert.equal(await findBridgeUpdate({ origin: 'system', version: null }, options), null);
+  assert.equal(calls.length, 7);
 });
 
 test('findBridgeUpdate propagates a failed release listing', async () => {

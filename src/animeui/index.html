@@ -192,7 +192,32 @@
     </main>
 
     <footer class="statusbar">
-      <span id="status-message"></span>
+      <section
+        class="request-error hidden"
+        id="request-error"
+        aria-labelledby="request-error-title"
+      >
+        <div class="request-error-heading">
+          <h2 id="request-error-title"></h2>
+          <button
+            class="ghost-button"
+            id="request-error-dismiss"
+            type="button"
+            aria-label="Dismiss error"
+          >
+            Dismiss
+          </button>
+        </div>
+        <div role="alert" aria-atomic="true">
+          <p class="request-error-explanation" id="request-error-explanation"></p>
+          <p class="request-error-guidance" id="request-error-guidance"></p>
+        </div>
+        <details class="request-error-details" id="request-error-details">
+          <summary>Technical details</summary>
+          <pre id="request-error-technical"></pre>
+        </details>
+      </section>
+      <span id="status-message" role="status"></span>
     </footer>
 
     <script type="module" src="./animeui.js"></script>

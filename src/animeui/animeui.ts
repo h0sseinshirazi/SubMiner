@@ -1,5 +1,6 @@
 import { describe, el } from './dom';
-import { sourceOptionLabel, summarizeSearch } from './format';
+import { createStatusPanel } from './status-panel';
+import { describeBridgeUpdate, sourceOptionLabel, summarizeSearch } from './format';
 import { applySearchUpdate, idleSearchProgress, summarizeProgress } from './search-progress';
 import { createExtensionsPanel } from './extensions-panel';
 import { createDetailPanel } from './detail-panel';
@@ -58,7 +59,6 @@ const bannerMessage = el<HTMLSpanElement>('bridge-message');
 const bannerMeter = el<HTMLSpanElement>('bridge-meter');
 const bannerMeterFill = el<HTMLElement>('bridge-meter-fill');
 const bannerUpdate = el<HTMLButtonElement>('bridge-update');
-const statusMessage = el<HTMLSpanElement>('status-message');
 const browseTab = el<HTMLButtonElement>('tab-browse');
 const extensionsTab = el<HTMLButtonElement>('tab-extensions');
 const settingsTab = el<HTMLButtonElement>('tab-settings');
@@ -92,10 +92,7 @@ function setView(view: View): void {
   settingsTab.setAttribute('aria-selected', String(view === 'settings'));
 }
 
-function setStatus(message: string, tone: 'info' | 'ok' | 'error' = 'info'): void {
-  statusMessage.textContent = message;
-  statusMessage.parentElement?.setAttribute('data-tone', tone);
-}
+const { setStatus } = createStatusPanel();
 
 const detailPanel = createDetailPanel({ api, setStatus });
 
@@ -137,18 +134,15 @@ function renderBridgeState(state: AnimeBrowserBridgeState): void {
 
   // An update is only offered from a running bridge; mid-start it would race
   // the start it interrupts.
-  const update = state.stage === 'ready' ? (state.install?.updateAvailable ?? null) : null;
+  const update = describeBridgeUpdate(state);
   // Once ready with nothing to report, the banner has nothing to say.
   const hide = state.stage === 'ready' && state.message === null && update === null;
   banner.classList.toggle('hidden', hide);
-  bannerMessage.textContent =
-    state.message ??
-    (update === null
-      ? BRIDGE_LABELS[state.stage]
-      : `Extension bridge ${state.install?.version ?? 'of unknown version'} is installed; ${update} is available.`);
-  bannerUpdate.classList.toggle('hidden', update === null);
-  bannerUpdate.textContent = update === null ? '' : `Update to ${update}`;
-  bannerUpdate.disabled = busy;
+  bannerMessage.textContent = state.message ?? update?.message ?? BRIDGE_LABELS[state.stage];
+  const buttonLabel = update?.buttonLabel ?? null;
+  bannerUpdate.classList.toggle('hidden', buttonLabel === null);
+  bannerUpdate.textContent = buttonLabel ?? '';
+  bannerUpdate.disabled = busy || buttonLabel === null;
 
   const showMeter = state.progress !== null;
   bannerMeter.classList.toggle('hidden', !showMeter);
@@ -305,7 +299,7 @@ api.onSearchUpdate((update) => {
   if (activeStreamRequestId !== browseState.requestId) return;
   if (applied.entries.length > 0) appendEntries(applied.entries);
   if (!progress.done) {
-    setStatus(summarizeProgress(progress), progress.failures.length > 0 ? 'error' : 'info');
+    setStatus(summarizeProgress(progress));
   }
 });
 

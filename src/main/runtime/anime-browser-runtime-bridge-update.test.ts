@@ -107,19 +107,28 @@ test('a failed update check is logged and leaves the bridge ready', async () => 
   assert.ok(logged.some((line) => /update check failed: rate limited/.test(line)));
 });
 
-test('a system install is never asked about updates', async () => {
+test('a system install broadcasts available updates without allowing installation', async () => {
   let asked = 0;
-  const { runtime } = await setup({
+  let staged = false;
+  const { runtime, states, stopped } = await setup({
     ensureBinaries: async () => ({ ...OLD, origin: 'system' }),
     checkBridgeUpdate: async () => {
       asked += 1;
       return LATEST;
     },
+    stageBridgeUpdate: async () => {
+      staged = true;
+      throw new Error('must not stage a system bridge update');
+    },
   });
   await runtime.ensureBridge();
   await tick();
-  assert.equal(asked, 0);
-  assert.equal(runtime.getSnapshot().bridge.install?.updateAvailable, null);
+  assert.equal(asked, 1);
+  assert.equal(runtime.getSnapshot().bridge.install?.updateAvailable, LATEST);
+  assert.equal(states.at(-1)?.install?.updateAvailable, LATEST);
+  await assert.rejects(runtime.updateBridge(), /managed outside SubMiner/);
+  assert.equal(staged, false);
+  assert.deepEqual(stopped, []);
 });
 
 test('updateBridge stages, stops the old bridge, and restarts on the new install', async () => {

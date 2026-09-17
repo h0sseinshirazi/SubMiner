@@ -5,8 +5,9 @@ import {
   sourceOptionLabel,
   summarizeSearch,
   describeBridgeInstall,
+  describeBridgeUpdate,
 } from './format';
-import type { AnimeBrowserSearchResult } from '../types/anime-browser';
+import type { AnimeBrowserBridgeState, AnimeBrowserSearchResult } from '../types/anime-browser';
 
 const result = (
   entryCount: number,
@@ -109,4 +110,44 @@ test('describeBridgeInstall does not treat an unchecked managed bridge as up to 
 
   assert.match(description, /unknown version.*checks this installation for updates after startup/);
   assert.doesNotMatch(description, /up to date/);
+});
+
+test('bridge update notices direct AUR and custom installs outside the app', () => {
+  const state = {
+    stage: 'ready',
+    progress: null,
+    message: null,
+    install: {
+      origin: 'system',
+      version: 'v1.0.6.4',
+      updateAvailable: 'v1.0.6.6',
+      dir: '/usr/share/mangatan/extension_server',
+    },
+  } satisfies AnimeBrowserBridgeState;
+  const notice = describeBridgeUpdate(state);
+  assert.equal(notice?.buttonLabel, null);
+  assert.match(notice?.message ?? '', /v1\.0\.6\.4 is installed; v1\.0\.6\.6 is available/);
+  assert.match(notice?.message ?? '', /AUR helper.*paru -S mangatan-extension-server/);
+
+  const custom = describeBridgeUpdate({
+    ...state,
+    install: { ...state.install, dir: '/custom/bridge' },
+  });
+  assert.equal(custom?.buttonLabel, null);
+  assert.match(custom?.message ?? '', /original installation method/);
+  assert.doesNotMatch(custom?.message ?? '', /AUR/);
+
+  const managed = describeBridgeUpdate({
+    ...state,
+    install: { ...state.install, origin: 'managed' },
+  });
+  assert.equal(managed?.buttonLabel, 'Update to v1.0.6.6');
+  assert.doesNotMatch(managed?.message ?? '', /AUR/);
+
+  assert.equal(describeBridgeUpdate({ ...state, stage: 'downloading' }), null);
+  assert.equal(describeBridgeUpdate({ ...state, install: null }), null);
+  assert.equal(
+    describeBridgeUpdate({ ...state, install: { ...state.install, updateAvailable: null } }),
+    null,
+  );
 });

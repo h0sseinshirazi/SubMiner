@@ -37,6 +37,7 @@ export function createOnWillQuitCleanupHandler(deps: {
   stopDiscordPresenceService: () => void;
 }) {
   return async (): Promise<void> => {
+    const cleanupErrors: unknown[] = [];
     deps.destroyTray();
     deps.stopConfigHotReload();
     deps.restorePreviousSecondarySubVisibility();
@@ -44,7 +45,11 @@ export function createOnWillQuitCleanupHandler(deps: {
     deps.unregisterAllGlobalShortcuts();
     deps.stopSubtitleWebsocket();
     deps.stopTexthookerService();
-    const stopSyncAutoScheduler = deps.stopSyncAutoScheduler();
+    const stopSyncAutoScheduler = Promise.resolve(deps.stopSyncAutoScheduler()).catch(
+      (error: unknown) => {
+        cleanupErrors.push(error);
+      },
+    );
     deps.clearWindowsVisibleOverlayForegroundPollLoop();
     deps.clearLinuxMpvFullscreenOverlayRefreshTimeouts();
     deps.destroyMainOverlayWindow();
@@ -66,20 +71,25 @@ export function createOnWillQuitCleanupHandler(deps: {
     deps.clearFirstRunSetupWindow();
     deps.destroyYomitanSettingsWindow();
     deps.clearYomitanSettingsWindow();
-    try {
-      deps.stopJellyfinRemoteSession();
-    } finally {
+    const runCleanup = (cleanup: () => void): void => {
       try {
-        deps.cleanupJellyfinSubtitleCache();
-      } finally {
-        deps.cleanupInternalSubtitleTrackCache();
+        cleanup();
+      } catch (error) {
+        cleanupErrors.push(error);
       }
+    };
+    try {
+      runCleanup(deps.stopJellyfinRemoteSession);
+      runCleanup(deps.cleanupJellyfinSubtitleCache);
+      runCleanup(deps.cleanupInternalSubtitleTrackCache);
+    } finally {
+      runCleanup(deps.cleanupYoutubeSubtitleTempDirs);
+      runCleanup(deps.cleanupYoutubeMediaCache);
+      runCleanup(deps.cleanupRemoteMediaWindows);
+      runCleanup(deps.stopDiscordPresenceService);
+      await stopSyncAutoScheduler;
     }
-    deps.cleanupYoutubeSubtitleTempDirs();
-    deps.cleanupYoutubeMediaCache();
-    deps.cleanupRemoteMediaWindows();
-    deps.stopDiscordPresenceService();
-    await stopSyncAutoScheduler;
+    if (cleanupErrors.length > 0) throw cleanupErrors[0];
   };
 }
 

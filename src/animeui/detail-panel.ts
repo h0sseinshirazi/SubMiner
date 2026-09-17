@@ -42,44 +42,60 @@ export function createDetailPanel({ api, setStatus }: DetailPanelOptions) {
     detailChips.replaceChildren();
     episodeList.clear();
     detailCover.src = entry.thumbnailUrl ?? '';
+    setStatus(`Loading ${entry.title}…`);
 
-    try {
-      const [details, episodes] = await Promise.all([
-        api.getDetails(entry.url, entry.sourceId),
-        api.getEpisodes(entry.url, entry.sourceId),
-      ]);
-      if (!requests.isCurrent(request)) return;
+    // Details and episodes are independent bridge calls. A source whose
+    // details call fails (a bridge that rejects the extension's metadata, a
+    // flaky page) can still list episodes, so a details failure only costs the
+    // description and chips, not the episode list.
+    const [detailsResult, episodesResult] = await Promise.allSettled([
+      api.getDetails(entry.url, entry.sourceId),
+      api.getEpisodes(entry.url, entry.sourceId),
+    ]);
+    if (!requests.isCurrent(request)) return;
 
-      detailTitle.textContent = details.title;
-      detailDescription.textContent = details.description ?? 'No description from this source.';
-      if (details.thumbnailUrl) detailCover.src = details.thumbnailUrl;
-
-      const chips: HTMLSpanElement[] = [];
-      const source = document.createElement('span');
-      source.className = 'chip source';
-      source.textContent = entry.sourceName;
-      chips.push(source);
-      if (details.status !== 'unknown') {
-        const status = document.createElement('span');
-        status.className = 'chip status';
-        status.textContent = details.status.replace(/-/g, ' ');
-        chips.push(status);
-      }
-      for (const genre of details.genres.slice(0, 6)) {
-        const chip = document.createElement('span');
-        chip.className = 'chip';
-        chip.textContent = genre;
-        chips.push(chip);
-      }
-      detailChips.replaceChildren(...chips);
-
-      episodeList.render(episodes);
-      setStatus(`${details.title} · ${episodes.length} episodes`);
-    } catch (error) {
-      if (!requests.isCurrent(request)) return;
+    if (episodesResult.status === 'rejected') {
       detailDescription.textContent = '';
-      setStatus(describe(error), 'error');
+      setStatus(describe(episodesResult.reason), 'error');
+      return;
     }
+    const episodes = episodesResult.value;
+
+    const chips: HTMLSpanElement[] = [];
+    const source = document.createElement('span');
+    source.className = 'chip source';
+    source.textContent = entry.sourceName;
+    chips.push(source);
+
+    if (detailsResult.status === 'rejected') {
+      detailDescription.textContent = 'Details unavailable from this source.';
+      detailChips.replaceChildren(...chips);
+      episodeList.render(episodes);
+      setStatus(describe(detailsResult.reason), 'error');
+      return;
+    }
+
+    const details = detailsResult.value;
+    detailTitle.textContent = details.title;
+    detailDescription.textContent = details.description ?? 'No description from this source.';
+    if (details.thumbnailUrl) detailCover.src = details.thumbnailUrl;
+
+    if (details.status !== 'unknown') {
+      const status = document.createElement('span');
+      status.className = 'chip status';
+      status.textContent = details.status.replace(/-/g, ' ');
+      chips.push(status);
+    }
+    for (const genre of details.genres.slice(0, 6)) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = genre;
+      chips.push(chip);
+    }
+    detailChips.replaceChildren(...chips);
+
+    episodeList.render(episodes);
+    setStatus(`${details.title} · ${episodes.length} episodes`);
   }
 
   function close(): void {

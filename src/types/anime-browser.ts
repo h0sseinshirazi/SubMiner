@@ -147,8 +147,9 @@ export interface AnimeBrowserBridgeInstall {
   dir: string;
   /**
    * The newest upstream release with a bundle for this platform, when it is
-   * newer than a managed install; null when current, not managed, or not yet
+   * newer than this install; null when current, not comparable, or not yet
    * checked. Filled in once the bridge is running, since it needs the network.
+   * Only managed installs can apply the update through SubMiner.
    */
   updateAvailable: string | null;
 }
