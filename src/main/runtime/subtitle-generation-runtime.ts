@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { readSubtitleGenerationReferences } from '../../core/services/subtitle-generation-reference';
+import { detectSubtitleGenerationAcceleration } from '../../core/services/subtitle-generation-acceleration';
 import { SUBTITLE_GENERATION_VAD_MODEL } from '../../shared/subtitle-generation-vad-model';
 import {
   downloadSubtitleGenerationVadModel,
@@ -35,6 +37,7 @@ export interface SubtitleGenerationRuntimeDeps {
   download?: typeof downloadSubtitleGenerationModel;
   resolveModel?: typeof resolveSubtitleGenerationModel;
   resolveTools?: typeof resolveSubtitleGenerationTools;
+  detectAcceleration?: typeof detectSubtitleGenerationAcceleration;
   downloadVad?: typeof downloadSubtitleGenerationVadModel;
   resolveVadModel?: typeof resolveSubtitleGenerationVadModel;
 }
@@ -80,6 +83,13 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
   let lastResult: SubtitleGenerationResult | null = null;
   let selectedModel: SubtitleGenerationModelId | null = null;
   let vadEnabled: boolean | null = null;
+  let accelerationCheck:
+    | {
+        path: string;
+        expires: number;
+        result: ReturnType<typeof detectSubtitleGenerationAcceleration>;
+      }
+    | undefined;
   function getConfig(): SubtitleGenerationConfig {
     const config = deps.getConfig();
     return {
@@ -127,6 +137,20 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
 
   async function getStatus(): Promise<SubtitleGenerationStatus> {
     const config = getConfig();
+    const tools = await (deps.resolveTools ?? resolveSubtitleGenerationTools)(config);
+    const whisperPath = tools.whisper.kind === 'found' ? tools.whisper.path : '';
+    if (
+      !accelerationCheck ||
+      accelerationCheck.path !== whisperPath ||
+      (!controller && Date.now() >= accelerationCheck.expires)
+    ) {
+      accelerationCheck = {
+        path: whisperPath,
+        expires: Date.now() + 30_000,
+        result: (deps.detectAcceleration ?? detectSubtitleGenerationAcceleration)(tools.whisper),
+      };
+    }
+    const acceleration = await accelerationCheck.result;
     const model = await (deps.resolveModel ?? resolveSubtitleGenerationModel)(
       config,
       deps.getModelDirectory(),
@@ -142,7 +166,8 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
         ),
       },
       // Session toggles decide whether the speech detector executable is required.
-      tools: await (deps.resolveTools ?? resolveSubtitleGenerationTools)(config),
+      tools,
+      acceleration,
       managedModel: config.managedModel,
       externalModelPath: config.modelPath.trim() || null,
       mediaPath,
@@ -214,7 +239,11 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
         const mediaPath = await currentLocalMedia(client);
         if (!client || !mediaPath)
           throw new Error('Open a local video or audio file in mpv first.');
-        const audioStreamIndex = selectedAudioIndex(await client.requestProperty('track-list'));
+        const tracks = await client.requestProperty('track-list');
+        const audioStreamIndex = selectedAudioIndex(tracks);
+        const references = await readSubtitleGenerationReferences(tracks, (name) =>
+          client.requestProperty(name),
+        );
         if ((await currentLocalMedia(client)) !== mediaPath)
           throw new Error('The current media changed. Start generation again.');
         signal.throwIfAborted();
@@ -223,6 +252,7 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
           modelDirectory: deps.getModelDirectory(),
           mediaPath,
           audioStreamIndex,
+          references,
           onProgress: report,
           signal,
         });

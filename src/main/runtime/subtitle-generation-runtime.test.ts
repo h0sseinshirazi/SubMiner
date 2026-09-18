@@ -23,6 +23,7 @@ function fixture(overrides: Partial<SubtitleGenerationRuntimeDeps> = {}) {
     getModelDirectory: () => '/models',
     getMpvClient: () => client,
     onProgress: () => {},
+    detectAcceleration: async () => ({ kind: 'unavailable' }),
     resolveModel: async () => ({ kind: 'external', path: '/models/local.bin' }),
     resolveTools: async (config) => ({
       ffmpeg: { kind: 'found', path: '/usr/bin/ffmpeg' },
@@ -69,6 +70,27 @@ test('generation preserves the output without attaching it to a different video'
   assert.equal(result.ok, true);
   assert.match(result.message, /Playback changed/);
   assert.deepEqual(subject.commands, []);
+});
+
+test('generation selects loaded dialogue references and excludes the signs track', async () => {
+  const subject = fixture({
+    generate: async (input) => {
+      assert.deepEqual(input.references, [
+        { label: 'English Full', delaySeconds: 0, source: { kind: 'embedded', streamIndex: 5 } },
+      ]);
+      return '/video/generated.srt';
+    },
+  });
+  const request = subject.client.requestProperty;
+  subject.client.requestProperty = async (name) =>
+    name === 'track-list'
+      ? [
+          { type: 'audio', selected: true, 'ff-index': 3 },
+          { type: 'sub', lang: 'eng', title: 'Signs & Songs', 'ff-index': 4 },
+          { type: 'sub', lang: 'eng', title: 'English Full', 'ff-index': 5 },
+        ]
+      : request(name);
+  assert.equal((await subject.runtime.start()).ok, true);
 });
 
 test('mpv load failure still reports where the generated subtitles were saved', async () => {
@@ -180,6 +202,40 @@ test('external model paths prevent managed selection, including unreadable overr
   });
   assert.equal((await runtime.getStatus()).externalModelPath, '/missing/external.bin');
   await assert.rejects(runtime.selectModel('medium'), /Clear Model Path/);
+});
+
+test('CUDA recommendations preserve selected and configured models and follow the Whisper path', async () => {
+  let whisperPath = '/cuda/whisper-cli';
+  const checked: string[] = [];
+  const subject = fixture({
+    getConfig: () => ({ ...DEFAULT_SUBTITLE_GENERATION_CONFIG, managedModel: 'medium' }),
+    resolveTools: async () => ({
+      ffmpeg: { kind: 'found', path: '/usr/bin/ffmpeg' },
+      ffprobe: { kind: 'found', path: '/usr/bin/ffprobe' },
+      whisper: { kind: 'found', path: whisperPath },
+      vad: null,
+    }),
+    detectAcceleration: async (whisper) => {
+      assert.equal(whisper.kind, 'found');
+      if (whisper.kind !== 'found') throw new Error('Expected a Whisper executable');
+      checked.push(whisper.path);
+      return whisper.path.startsWith('/cuda/')
+        ? { kind: 'nvidia-cuda', gpuName: 'NVIDIA Test GPU' }
+        : { kind: 'unavailable' };
+    },
+  });
+  const initial = await subject.runtime.getStatus();
+  assert.deepEqual(initial.acceleration, { kind: 'nvidia-cuda', gpuName: 'NVIDIA Test GPU' });
+  assert.equal(initial.managedModel, 'medium');
+  const selected = await subject.runtime.selectModel('small');
+  assert.equal(selected.managedModel, 'small');
+  assert.equal(selected.acceleration.kind, 'nvidia-cuda');
+  assert.deepEqual(checked, ['/cuda/whisper-cli']);
+  whisperPath = '/cpu/whisper-cli';
+  const changed = await subject.runtime.getStatus();
+  assert.equal(changed.acceleration.kind, 'unavailable');
+  assert.equal(changed.managedModel, 'small');
+  assert.deepEqual(checked, ['/cuda/whisper-cli', '/cpu/whisper-cli']);
 });
 
 test('status reports the speech detector only while dialogue mode is on', async () => {
