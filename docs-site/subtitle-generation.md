@@ -57,7 +57,7 @@ A configured external Model Path takes precedence and hides the managed model pi
 4. Optionally check **Focus on spoken dialogue** and click **Download speech detection model** if prompted.
 5. Click **Generate subtitles**.
 
-The modal shows audio preparation, transcription, and saving progress. Percentages appear when the underlying tool reports them. **Cancel** stops the current operation. Closing the modal lets the job continue; reopening it shows the current progress or result.
+The modal adapts to the player window, using a wider layout when space allows and scrolling in smaller windows. It shows audio preparation, transcription, and saving progress. Percentages appear when the underlying tool reports them. **Cancel** stops the current operation. Closing the modal lets the job continue; reopening it shows the current progress or result.
 
 **Escape** or **Close** closes the modal using the same focus and overlay restoration as other SubMiner modals. Change or disable its shortcut with `shortcuts.openSubtitleGeneration` in Settings. Ctrl+G remains assigned to field grouping.
 

@@ -2977,7 +2977,7 @@ iframe[id^='yomitan-popup'],
 }
 
 .subtitle-generation-content {
-  width: min(580px, 92%);
+  width: min(860px, 92%);
   max-height: 92%;
   border-top: 3px solid var(--ctp-green);
 }
