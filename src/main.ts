@@ -6011,6 +6011,11 @@ const { registerIpcRuntimeHandlers } = composeIpcRuntimeHandlers({
       getRuntimeOptionsManager: () => appState.runtimeOptionsManager,
       getSubtitleTimingTracker: () => appState.subtitleTimingTracker,
       getMpvClient: () => appState.mpvClient,
+      autoSyncDownloadedSubtitle: (pathToSubtitle: string) => {
+        // Fire-and-forget: the download flow must not wait on a retime that can
+        // take tens of seconds, and subsync reports its own outcome on the OSD.
+        void subsyncRuntime.autoSyncDownload(pathToSubtitle);
+      },
       getAnkiIntegration: () => appState.ankiIntegration,
       setAnkiIntegration: (integration: AnkiIntegration | null) => {
         appState.ankiIntegration = integration;

@@ -42,8 +42,11 @@ export interface HyprlandMonitor {
   id: number;
   x: number;
   y: number;
+  /** Physical pixel width; divide by {@link scale} for layout coordinates. */
   width: number;
+  /** Physical pixel height; divide by {@link scale} for layout coordinates. */
   height: number;
+  scale?: number;
 }
 
 interface SelectHyprlandMpvWindowOptions {
@@ -179,11 +182,17 @@ export function resolveHyprlandWindowGeometry(
   if (isHyprlandFullscreenClient(client) && typeof client.monitor === 'number') {
     const monitor = monitors?.find((candidate) => candidate.id === client.monitor);
     if (monitor) {
+      // hyprctl reports monitor width/height in physical pixels, while client
+      // at/size and monitor x/y are layout coordinates. Under fractional
+      // scaling the raw values overshoot the screen (1920x1080 at scale 1.25
+      // is 1536x864 of layout space), which stretches the overlay past
+      // fullscreen mpv and hides the video behind it.
+      const scale = typeof monitor.scale === 'number' && monitor.scale > 0 ? monitor.scale : 1;
       return {
         x: monitor.x,
         y: monitor.y,
-        width: monitor.width,
-        height: monitor.height,
+        width: Math.round(monitor.width / scale),
+        height: Math.round(monitor.height / scale),
       };
     }
   }

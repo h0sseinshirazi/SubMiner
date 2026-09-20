@@ -416,7 +416,9 @@
     "alass_path": "", // Optional absolute path to the alass binary used by subsync. Leave empty to auto-discover from PATH.
     "ffsubsync_path": "", // Optional absolute path to the ffsubsync binary used by subsync. Leave empty to auto-discover from PATH.
     "ffmpeg_path": "", // Optional absolute path to the ffmpeg binary used by subsync. Leave empty to auto-discover from PATH.
-    "replace": true // Replace the active subtitle file when sync completes. Values: true | false
+    "replace": true, // Replace the active subtitle file when sync completes. Values: true | false
+    "autoSyncDownloads": false, // Retime subtitles automatically after a Jimaku or TsukiHime download loads into mpv. Local playback only; stream URLs are skipped because neither engine can use them as a reference. Values: true | false
+    "autoSyncEngine": "ffsubsync" // Engine used by the automatic post-download retime. ffsubsync reads the media audio track; alass compares against the media file. Values: alass | ffsubsync
   }, // Subsync engine and executable paths.
 
   // ==========================================

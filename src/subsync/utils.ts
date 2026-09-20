@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as childProcess from 'child_process';
 import * as path from 'path';
 import { DEFAULT_CONFIG } from '../config';
-import { SubsyncConfig } from '../types';
+import { SubsyncConfig, SubsyncEngine } from '../types';
 
 export interface MpvTrack {
   id?: number;
@@ -21,6 +21,8 @@ export interface SubsyncResolvedConfig {
   ffsubsyncPath: string;
   ffmpegPath: string;
   replace?: boolean;
+  autoSyncDownloads?: boolean;
+  autoSyncEngine?: SubsyncEngine;
 }
 
 const DEFAULT_SUBSYNC_EXECUTABLE_PATHS = {
@@ -93,6 +95,8 @@ export function getSubsyncConfig(config: SubsyncConfig | undefined): SubsyncReso
     ffsubsyncPath: resolvePath(config?.ffsubsync_path, DEFAULT_SUBSYNC_EXECUTABLE_PATHS.ffsubsync),
     ffmpegPath: resolvePath(config?.ffmpeg_path, DEFAULT_SUBSYNC_EXECUTABLE_PATHS.ffmpeg),
     replace: config?.replace ?? DEFAULT_CONFIG.subsync.replace,
+    autoSyncDownloads: config?.autoSyncDownloads ?? DEFAULT_CONFIG.subsync.autoSyncDownloads,
+    autoSyncEngine: config?.autoSyncEngine ?? DEFAULT_CONFIG.subsync.autoSyncEngine,
   };
 }
 

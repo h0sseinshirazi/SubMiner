@@ -4,6 +4,7 @@ import {
   OVERLAY_NOTIFICATION_POSITION_VALUES,
   SETTINGS_NOTIFICATION_TYPE_VALUES,
 } from '../../types/notification';
+import { SUBSYNC_ENGINE_VALUES } from '../../types/runtime';
 import { ConfigOptionRegistryEntry } from './shared';
 
 export function buildCoreConfigOptionRegistry(
@@ -461,6 +462,21 @@ export function buildCoreConfigOptionRegistry(
       defaultValue: defaultConfig.subsync.ffmpeg_path,
       description:
         'Optional absolute path to the ffmpeg binary used by subsync. Leave empty to auto-discover from PATH.',
+    },
+    {
+      path: 'subsync.autoSyncDownloads',
+      kind: 'boolean',
+      defaultValue: defaultConfig.subsync.autoSyncDownloads,
+      description:
+        'Retime subtitles automatically after a Jimaku or TsukiHime download loads into mpv. Local playback only; stream URLs are skipped because neither engine can use them as a reference.',
+    },
+    {
+      path: 'subsync.autoSyncEngine',
+      kind: 'enum',
+      enumValues: SUBSYNC_ENGINE_VALUES,
+      defaultValue: defaultConfig.subsync.autoSyncEngine,
+      description:
+        'Engine used by the automatic post-download retime. ffsubsync reads the media audio track; alass compares against the media file.',
     },
     {
       path: 'startupWarmups.lowPowerMode',

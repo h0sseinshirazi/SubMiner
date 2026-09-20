@@ -1,6 +1,7 @@
 import { ResolveContext } from './context';
 import { applyControllerConfig } from './controller';
 import { isNotificationType, isOverlayNotificationPosition } from '../../types/notification';
+import { SUBSYNC_ENGINE_VALUES, isSubsyncEngine } from '../../types/runtime';
 import { asBoolean, asNumber, asString, isObject } from './shared';
 
 export function applyCoreDomainConfig(context: ResolveContext): void {
@@ -385,6 +386,28 @@ export function applyCoreDomainConfig(context: ResolveContext): void {
       resolved.subsync.replace = replace;
     } else if (src.subsync.replace !== undefined) {
       warn('subsync.replace', src.subsync.replace, resolved.subsync.replace, 'Expected boolean.');
+    }
+    const autoSyncDownloads = asBoolean(src.subsync.autoSyncDownloads);
+    if (autoSyncDownloads !== undefined) {
+      resolved.subsync.autoSyncDownloads = autoSyncDownloads;
+    } else if (src.subsync.autoSyncDownloads !== undefined) {
+      warn(
+        'subsync.autoSyncDownloads',
+        src.subsync.autoSyncDownloads,
+        resolved.subsync.autoSyncDownloads,
+        'Expected boolean.',
+      );
+    }
+    const autoSyncEngine = asString(src.subsync.autoSyncEngine);
+    if (autoSyncEngine !== undefined && isSubsyncEngine(autoSyncEngine)) {
+      resolved.subsync.autoSyncEngine = autoSyncEngine;
+    } else if (src.subsync.autoSyncEngine !== undefined) {
+      warn(
+        'subsync.autoSyncEngine',
+        src.subsync.autoSyncEngine,
+        resolved.subsync.autoSyncEngine,
+        `Expected one of ${SUBSYNC_ENGINE_VALUES.join(', ')}.`,
+      );
     }
   }
 

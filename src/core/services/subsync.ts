@@ -40,7 +40,7 @@ function summarizeCommandFailure(command: string, result: CommandResult): string
   return `command failed (${command}) ${parts.join(' | ')}`;
 }
 
-interface MpvClientLike {
+export interface MpvClientLike {
   connected: boolean;
   currentAudioStreamIndex: number | null;
   send: (payload: { command: (string | number)[] }) => void;
@@ -300,7 +300,7 @@ function normalizeSubtitlePathForCompare(value: string): string {
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
-async function findAddedSubtitleTrackId(
+export async function findAddedSubtitleTrackId(
   client: MpvClientLike,
   pathToLoad: string,
 ): Promise<number | null> {

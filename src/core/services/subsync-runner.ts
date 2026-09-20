@@ -1,6 +1,7 @@
 import { SubsyncManualPayload, SubsyncManualRunRequest, SubsyncResult } from '../../types';
 import { SubsyncResolvedConfig } from '../../subsync/utils';
 import { runSubsyncManualFromIpc } from './ipc-command';
+import { autoSyncDownloadedSubtitle } from './subsync-auto';
 import {
   TriggerSubsyncFromConfigDeps,
   runSubsyncManual,
@@ -43,7 +44,10 @@ async function runWithSubsyncSpinnerService<T>(
   }
 }
 
-function buildTriggerSubsyncDeps(deps: SubsyncRuntimeDeps): TriggerSubsyncFromConfigDeps {
+function buildTriggerSubsyncDeps(
+  deps: SubsyncRuntimeDeps,
+  spinnerLabel?: string,
+): TriggerSubsyncFromConfigDeps {
   return {
     getMpvClient: deps.getMpvClient,
     getResolvedConfig: deps.getResolvedSubsyncConfig,
@@ -51,7 +55,7 @@ function buildTriggerSubsyncDeps(deps: SubsyncRuntimeDeps): TriggerSubsyncFromCo
     setSubsyncInProgress: deps.setSubsyncInProgress,
     showMpvOsd: deps.showMpvOsd,
     runWithSubsyncSpinner: <T>(task: () => Promise<T>) =>
-      runWithSubsyncSpinnerService(task, deps.showMpvOsd),
+      runWithSubsyncSpinnerService(task, deps.showMpvOsd, spinnerLabel),
     openManualPicker: deps.openManualPicker,
   };
 }
@@ -72,4 +76,14 @@ export async function runSubsyncManualFromIpcRuntime(
     runWithSpinner: (task) => triggerDeps.runWithSubsyncSpinner(() => task()),
     runSubsyncManual: (subsyncRequest) => runSubsyncManual(subsyncRequest, triggerDeps),
   });
+}
+
+export async function autoSyncDownloadedSubtitleRuntime(
+  subtitlePath: string,
+  deps: SubsyncRuntimeDeps,
+): Promise<SubsyncResult | null> {
+  return autoSyncDownloadedSubtitle(
+    subtitlePath,
+    buildTriggerSubsyncDeps(deps, 'Auto-sync: retiming'),
+  );
 }

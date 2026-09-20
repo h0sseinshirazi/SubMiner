@@ -179,6 +179,49 @@ test('resolveHyprlandWindowGeometry uses monitor bounds for client-requested ful
   });
 });
 
+// hyprctl reports monitor width/height in physical pixels. Using them raw on a
+// fractionally scaled screen sizes the overlay past fullscreen mpv, so the video
+// disappears behind a full-screen subtitle layer.
+test('resolveHyprlandWindowGeometry converts monitor bounds to layout coordinates under fractional scaling', () => {
+  const geometry = resolveHyprlandWindowGeometry(
+    makeClient({
+      at: [0, 0],
+      size: [1536, 864],
+      monitor: 0,
+      fullscreen: 2,
+      fullscreenClient: 2,
+    }),
+    [makeMonitor({ id: 0, x: 0, y: 0, width: 1920, height: 1080, scale: 1.25 })],
+  );
+
+  assert.deepEqual(geometry, {
+    x: 0,
+    y: 0,
+    width: 1536,
+    height: 864,
+  });
+});
+
+test('resolveHyprlandWindowGeometry treats a missing or zero monitor scale as 1', () => {
+  for (const scale of [undefined, 0]) {
+    const geometry = resolveHyprlandWindowGeometry(
+      makeClient({ at: [0, 0], size: [800, 600], monitor: 0, fullscreen: 2 }),
+      [
+        makeMonitor({
+          id: 0,
+          x: 0,
+          y: 0,
+          width: 1920,
+          height: 1080,
+          ...(scale === undefined ? {} : { scale }),
+        }),
+      ],
+    );
+
+    assert.deepEqual(geometry, { x: 0, y: 0, width: 1920, height: 1080 });
+  }
+});
+
 test('HyprlandWindowTracker re-emits focus callback on active window events for z-order refresh', () => {
   const calls: string[] = [];
   const tracker = new HyprlandWindowTracker();

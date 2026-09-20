@@ -54,6 +54,8 @@ export interface AnkiJimakuIpcRuntimeOptions {
   getRuntimeOptionsManager: () => RuntimeOptionsManagerLike | null;
   getSubtitleTimingTracker: () => SubtitleTimingTrackerLike | null;
   getMpvClient: () => MpvClientLike | null;
+  /** Retime a freshly downloaded subtitle; no-op when subsync.autoSyncDownloads is off. */
+  autoSyncDownloadedSubtitle?: (pathToSubtitle: string) => void;
   getAnkiIntegration: () => AnkiIntegration | null;
   setAnkiIntegration: (integration: AnkiIntegration | null) => void;
   getKnownWordCacheStatePath: () => string;
@@ -291,6 +293,7 @@ export function registerAnkiJimakuIpcRuntime(
       if (mpvClient && mpvClient.connected) {
         mpvClient.send({ command: ['sub-add', pathToSubtitle, 'select'] });
       }
+      options.autoSyncDownloadedSubtitle?.(pathToSubtitle);
     },
     onDownloadedSecondarySubtitle: async (pathToSubtitle) => {
       const mpvClient = options.getMpvClient();
@@ -312,6 +315,9 @@ export function registerAnkiJimakuIpcRuntime(
           );
           if (added && typeof added.id === 'number') {
             mpvClient.send({ command: ['set_property', 'secondary-sid', added.id] });
+            // mpv processes IPC commands in order, so the retime's own
+            // secondary-sid read sees the track we just selected.
+            options.autoSyncDownloadedSubtitle?.(pathToSubtitle);
             return;
           }
         } catch (error) {

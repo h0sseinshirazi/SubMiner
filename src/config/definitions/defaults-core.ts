@@ -125,6 +125,8 @@ export const CORE_DEFAULT_CONFIG: Pick<
     ffsubsync_path: '',
     ffmpeg_path: '',
     replace: true,
+    autoSyncDownloads: false,
+    autoSyncEngine: 'ffsubsync',
   },
   startupWarmups: {
     lowPowerMode: false,

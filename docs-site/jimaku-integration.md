@@ -22,6 +22,8 @@ From there:
 
 If no files match the current episode filter, a "Show all files" button lets you broaden the search to all episodes for that entry.
 
+A downloaded file is timed against whichever release it came from, so it may not line up with your video. Set [`subsync.autoSyncDownloads`](/configuration#subtitle-sync) to have SubMiner retime it against the media file automatically as it loads, instead of opening the sync modal after every download.
+
 ### Modal keyboard shortcuts
 
 | Key                          | Action                                        |

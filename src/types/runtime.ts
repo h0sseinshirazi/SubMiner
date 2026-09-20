@@ -109,8 +109,16 @@ export interface SubsyncManualPayload {
 
 export type SubsyncReferenceMode = 'track' | 'video';
 
+export type SubsyncEngine = 'alass' | 'ffsubsync';
+
+export const SUBSYNC_ENGINE_VALUES: readonly SubsyncEngine[] = ['alass', 'ffsubsync'];
+
+export function isSubsyncEngine(value: unknown): value is SubsyncEngine {
+  return typeof value === 'string' && (SUBSYNC_ENGINE_VALUES as readonly string[]).includes(value);
+}
+
 export interface SubsyncManualRunRequest {
-  engine: 'alass' | 'ffsubsync';
+  engine: SubsyncEngine;
   /** alass reference source: another subtitle track, or the loaded media file itself. */
   referenceMode?: SubsyncReferenceMode;
   referenceTrackId?: number | null;

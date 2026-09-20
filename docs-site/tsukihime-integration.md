@@ -24,7 +24,7 @@ From there:
 2. **Browse releases** - Select a release to list the text subtitle tracks extracted from its files. English tracks sort first; image-based tracks (PGS/VobSub) are filtered out.
 3. **Download** - Selecting a track downloads the xz-compressed subtitle from TsukiHime's storage, decompresses it, saves it next to the video (or a temp directory for remote/streamed media), and loads it into mpv. Japanese tracks are selected as mpv's **primary** subtitle. Tracks from the configured secondary tab are assigned to mpv's **secondary** subtitle slot without replacing the primary. The filename carries the track's language - `<video basename>.en.<ext>` for English, `.ja` for Japanese, and so on - so mpv and media servers detect the language correctly.
 
-TsukiHime's releases are the same files that circulate as torrents. Pick the release matching your local file, same group and same version, and the timing lines up exactly with no resync. For a raw or a different group's encode, take any release of the episode and fix the offset with the [subtitle sync tools](/troubleshooting#subtitle-sync-subsync) (`Ctrl+Alt+S`).
+TsukiHime's releases are the same files that circulate as torrents. Pick the release matching your local file, same group and same version, and the timing lines up exactly with no resync. For a raw or a different group's encode, take any release of the episode and fix the offset with the [subtitle sync tools](/troubleshooting#subtitle-sync-subsync) (`Ctrl+Alt+S`), or set [`subsync.autoSyncDownloads`](/configuration#subtitle-sync) to have every download retimed automatically as it loads.
 
 ### Modal keyboard shortcuts
 
@@ -79,4 +79,4 @@ The previous `--open-animetosho` flag and `__animetosho-open` keybinding command
 - **"No releases with Japanese subtitles"** - none of the search results carry a Japanese track. Most releases only ship English subtitles; try another search, or use the [Jimaku integration](/jimaku-integration) for Japanese subtitles.
 - **"Batch releases are not supported"** - TsukiHime only exposes extracted attachments for single-file torrents. Pick the single-episode release for your episode instead of a season batch.
 - **"No text subtitle tracks in this release"** - the release only carries image-based subtitles (PGS/VobSub) or none at all; try a different release (fansub and SubsPlease-style releases almost always carry ASS tracks).
-- **Timing is off** - the subtitle came from a different release than your video file. Use the subtitle sync modal (`Ctrl+Alt+S`) or pick the release matching your file exactly.
+- **Timing is off** - the subtitle came from a different release than your video file. Use the subtitle sync modal (`Ctrl+Alt+S`), enable [`subsync.autoSyncDownloads`](/configuration#subtitle-sync), or pick the release matching your file exactly.

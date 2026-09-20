@@ -1208,13 +1208,17 @@ Sync a subtitle track from the overlay picker using `alass` or `ffsubsync`. The 
 - [`alass`](https://github.com/kaegi/alass) - fast, audio-independent sync using another subtitle as reference; it can also take the local video file as reference (alass extracts the audio itself)
 - [`ffsubsync`](https://github.com/smacke/ffsubsync) - audio-based sync using the video file as reference
 
+Downloaded subtitles can also be retimed without opening the picker: set `autoSyncDownloads` and every Jimaku or TsukiHime download is aligned against the media file as soon as it loads into mpv.
+
 ```json
 {
   "subsync": {
     "alass_path": "",
     "ffsubsync_path": "",
     "ffmpeg_path": "",
-    "replace": true
+    "replace": true,
+    "autoSyncDownloads": false,
+    "autoSyncEngine": "ffsubsync"
   }
 }
 ```
@@ -1225,6 +1229,8 @@ Sync a subtitle track from the overlay picker using `alass` or `ffsubsync`. The 
 | `ffsubsync_path` | string path     | Path to `ffsubsync` executable. Empty falls back to `/usr/bin/ffsubsync`. `ffsubsync` must be installed separately.       |
 | `ffmpeg_path`    | string path     | Path to `ffmpeg` (used for internal subtitle extraction). Empty or `null` falls back to `/usr/bin/ffmpeg`.                |
 | `replace`        | `true`, `false` | When `true` (default), overwrite the active subtitle file on successful sync. When `false`, write `<name>_retimed.<ext>`. |
+| `autoSyncDownloads` | `true`, `false` | Retime Jimaku and TsukiHime downloads automatically once they load into mpv. Off by default. Skipped for stream URLs. |
+| `autoSyncEngine` | `alass`, `ffsubsync` | Engine used by the automatic retime. Defaults to `ffsubsync`. Ignored when `autoSyncDownloads` is off. |
 
 Default trigger is `Ctrl+Alt+S` via `shortcuts.triggerSubsync`.
 Customize it there, or set it to `null` to disable.

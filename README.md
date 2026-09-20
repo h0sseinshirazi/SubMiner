@@ -104,7 +104,7 @@ Browse sibling episode files and the active mpv queue in one overlay modal. Open
   </tr>
   <tr>
     <td><b>alass / ffsubsync</b></td>
-    <td>Manual subtitle retiming — requires <code>alass</code> or <code>ffsubsync</code> on your <code>PATH</code> (optional; subtitle syncing is disabled without them)</td>
+    <td>Subtitle retiming from the overlay picker, or automatically after every Jimaku/TsukiHime download with <code>subsync.autoSyncDownloads</code> — requires <code>alass</code> or <code>ffsubsync</code> on your <code>PATH</code> (optional; subtitle syncing is disabled without them)</td>
   </tr>
   <tr>
     <td><b>WebSocket</b></td>

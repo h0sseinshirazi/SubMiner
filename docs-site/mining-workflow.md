@@ -171,6 +171,12 @@ For remote streams, including Jellyfin playback, the modal only offers alass wit
 
 Install the sync tools separately - see [Troubleshooting](/troubleshooting#subtitle-sync-subsync) if the tools are not found.
 
+### Automatic sync after download
+
+A subtitle you download is timed against the release it was ripped from, which is rarely the file you are watching. Rather than open the picker after every download, set `subsync.autoSyncDownloads` and SubMiner runs the retime for you: the moment a Jimaku or TsukiHime download loads into mpv, it is aligned against the media file and reloaded into the slot it arrived in. `subsync.autoSyncEngine` picks the engine.
+
+Playback is never blocked while the retime runs - the OSD shows a spinner and then the result. Stream URLs are skipped, because neither engine can use a remote media path as its reference; use the manual picker with a subtitle reference instead. See [Configuration - Subtitle Sync](/configuration#subtitle-sync) for both options.
+
 ## Texthooker
 
 SubMiner serves a texthooker UI from a local HTTP server at `http://127.0.0.1:5174`. The port is fixed unless you override it with the mpv plugin's `texthooker_port` script-opt. External tools read subtitle text from it as lines arrive, which is how you would feed a browser-based Yomitan instance.

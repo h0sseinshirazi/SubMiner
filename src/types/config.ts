@@ -1,4 +1,5 @@
 import type { AnkiConnectConfig, WordCardKind } from './anki';
+import type { SubsyncEngine } from './runtime';
 import type { SubtitleGenerationConfig } from '../shared/subtitle-generation';
 import type {
   AiConfig,
@@ -78,6 +79,10 @@ export interface SubsyncConfig {
   ffsubsync_path?: string;
   ffmpeg_path?: string;
   replace?: boolean;
+  /** Retime subtitles automatically once a Jimaku/TsukiHime download loads into mpv. */
+  autoSyncDownloads?: boolean;
+  /** Engine used by the automatic post-download retime. */
+  autoSyncEngine?: SubsyncEngine;
 }
 
 export interface StartupWarmupsConfig {

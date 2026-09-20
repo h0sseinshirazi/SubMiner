@@ -130,6 +130,7 @@ export interface AnkiJimakuIpcRuntimeServiceDepsParams {
   getRuntimeOptionsManager: AnkiJimakuIpcRuntimeOptions['getRuntimeOptionsManager'];
   getSubtitleTimingTracker: AnkiJimakuIpcRuntimeOptions['getSubtitleTimingTracker'];
   getMpvClient: AnkiJimakuIpcRuntimeOptions['getMpvClient'];
+  autoSyncDownloadedSubtitle?: AnkiJimakuIpcRuntimeOptions['autoSyncDownloadedSubtitle'];
   getAnkiIntegration: AnkiJimakuIpcRuntimeOptions['getAnkiIntegration'];
   setAnkiIntegration: AnkiJimakuIpcRuntimeOptions['setAnkiIntegration'];
   getKnownWordCacheStatePath: AnkiJimakuIpcRuntimeOptions['getKnownWordCacheStatePath'];
@@ -335,6 +336,9 @@ export function createAnkiJimakuIpcRuntimeServiceDeps(
     getRuntimeOptionsManager: params.getRuntimeOptionsManager,
     getSubtitleTimingTracker: params.getSubtitleTimingTracker,
     getMpvClient: params.getMpvClient,
+    ...(params.autoSyncDownloadedSubtitle
+      ? { autoSyncDownloadedSubtitle: params.autoSyncDownloadedSubtitle }
+      : {}),
     getAnkiIntegration: params.getAnkiIntegration,
     setAnkiIntegration: params.setAnkiIntegration,
     getKnownWordCacheStatePath: params.getKnownWordCacheStatePath,
