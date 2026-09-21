@@ -4138,7 +4138,6 @@ const immersionTrackerStartupMainDeps: Parameters<
 
       // Register stats overlay toggle IPC handler (idempotent)
       registerStatsOverlayToggle({
-        staticDir: statsDistPath,
         preloadPath: statsPreloadPath,
         getApiBaseUrl: async () => (await ensureStatsServerStarted()).url,
         onStartupError: (error) =>
@@ -5442,7 +5441,6 @@ async function dispatchSessionAction(request: SessionActionDispatchRequest): Pro
   await dispatchSessionActionCore(request, {
     toggleStatsOverlay: async () =>
       await toggleStatsOverlayWindow({
-        staticDir: statsDistPath,
         preloadPath: statsPreloadPath,
         getApiBaseUrl: async () => (await ensureStatsServerStarted()).url,
         onStartupError: (error) =>
