@@ -3,6 +3,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { AnkiConnectConfig } from '../../types.js';
 import type { AnilistRateLimiter } from './anilist/rate-limiter.js';
+import type { TmdbClient } from './tmdb/tmdb-client.js';
 import type { ImmersionTrackerService } from './immersion-tracker-service.js';
 import type { RetimedSecondarySubtitleInput } from './secondary-subtitle-sidecar.js';
 import type { StatsServerMediaGenerator } from './stats-server/mining-support.js';
@@ -129,6 +130,7 @@ export interface StatsServerConfig {
     input: RetimedSecondarySubtitleInput,
   ) => Promise<string> | string;
   anilistRateLimiter?: AnilistRateLimiter;
+  tmdbClient?: TmdbClient;
   addYomitanNote?: (word: string) => Promise<number | null>;
   resolveAnkiNoteId?: (noteId: number) => number;
   resolveSentenceSearchHeadwords?: (term: string) => Promise<string[]> | string[];
@@ -151,6 +153,7 @@ export function createStatsApp(
       input: RetimedSecondarySubtitleInput,
     ) => Promise<string> | string;
     anilistRateLimiter?: AnilistRateLimiter;
+    tmdbClient?: TmdbClient;
     addYomitanNote?: (word: string) => Promise<number | null>;
     resolveAnkiNoteId?: (noteId: number) => number;
     resolveSentenceSearchHeadwords?: (term: string) => Promise<string[]> | string[];
@@ -186,6 +189,7 @@ export async function startStatsServerWithRuntime(
     getStatsMiningAlassPath: config.getStatsMiningAlassPath,
     resolveRetimedSecondarySubtitleText: config.resolveRetimedSecondarySubtitleText,
     anilistRateLimiter: config.anilistRateLimiter,
+    tmdbClient: config.tmdbClient,
     addYomitanNote: config.addYomitanNote,
     resolveAnkiNoteId: config.resolveAnkiNoteId,
     resolveSentenceSearchHeadwords: config.resolveSentenceSearchHeadwords,
