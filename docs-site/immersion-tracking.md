@@ -55,12 +55,12 @@ When older stats already grouped multiple seasons under one series entry, SubMin
 
 Jellyfin stream URLs are normalized to stable item links before stats titles are shown, so playback query parameters are not displayed in the dashboard.
 
-When YouTube channel metadata is available, the Library tab groups videos by creator/channel and treats each tracked video as an episode-like entry inside that channel section.
+When YouTube channel metadata is available, the Library tab groups videos by creator/channel. Use **All Titles**, **Anime**, or **YouTube** above the grid to filter the library. Channel pages show tracked videos and their stats without AniList controls. Existing channel entries are classified as YouTube automatically on startup, preserving viewing history and manual video assignments. Anime and YouTube entries with the same normalized title remain separate, including during stats sync. Channels are excluded from anime metadata matching, season repair, and duplicate recommendations.
 
 A library entry is identified by its parsed title plus any detected season, so the same show can end up on several cards when releases disagree about the title or omit the season tag. Two fixes are available:
 
-- **Merge duplicates.** Hit **Select** above the grid, tick the cards that are the same show, and choose **Merge Selected**. Pick which entry to keep in the dialog; every episode moves onto it and the other cards are removed. Nothing is deleted, so sessions, mined cards and watch time all carry over. SubMiner remembers the merged title variants, so future episodes parsed with one of those names join the kept entry instead of recreating a duplicate card.
-- **Move a single episode.** Hover an episode row in a title's episode list and use the **→** button to reassign it to another library entry. The correction is remembered, so later filename parsing or Jellyfin metadata cannot move that episode back. For local files, later episodes in the same directory inherit the correction when their detected seasons are compatible and every manual correction there points to the same entry; a file that parses to a title which already has its own library entry keeps that identity instead. Conflicting seasons or manual destinations are left for review. If the move empties the old entry, that card is removed and you are returned to the grid.
+- **Merge duplicates.** Hit **Select** above the grid, tick the cards that are the same show, and choose **Merge Selected**. Pick which entry to keep in the dialog; every episode moves onto it and the other cards are removed. Nothing is deleted, so sessions, mined cards and watch time all carry over. Anime entries and YouTube channels cannot be merged into each other. SubMiner remembers the merged title variants, so future episodes parsed with one of those names join the kept entry instead of recreating a duplicate card.
+- **Move a single episode.** Hover an episode row in a title's episode list and use the **→** button to reassign it to another library entry of the same kind, so a YouTube video can only move between channels. The correction is remembered, so later filename parsing or Jellyfin metadata cannot move that episode back. For local files, later episodes in the same directory inherit the correction when their detected seasons are compatible and every manual correction there points to the same entry; a file that parses to a title which already has its own library entry keeps that identity instead. Conflicting seasons or manual destinations are left for review. If the move empties the old entry, that card is removed and you are returned to the grid.
 
 Once cover art resolves a series to an AniList entry, cards with compatible seasons are folded together automatically only when the searched title exactly matches an AniList title or synonym. A fuzzy result that points at an AniList entry already used by another card appears as a **Possible duplicate** review above the Library grid instead. Choose **Review merge** to compare the cards and pick which one to keep, or **Not duplicates** to dismiss that suggestion permanently. Entries with conflicting explicit season numbers are left alone rather than merged or suggested.
 
@@ -327,14 +327,14 @@ LIMIT ?;
 - Large-table reads are index-backed for `sample_ms`, session time windows, frequency-ranked words/kanji, and cover-art identity lookups.
 - Workload-dependent tuning knobs remain at defaults unless you change them: `cache_size`, `mmap_size`, `temp_store`, `auto_vacuum`.
 
-### Schema (v23)
+### Schema (v24)
 
 The exact schema version lives in `SCHEMA_VERSION` (`src/core/services/immersion-tracker/types.ts`) and is recorded in the `imm_schema_version` table.
 
 Core tables:
 
 - `imm_videos` - video key/title/source metadata
-- `imm_anime` - anime/series metadata referenced by videos and lifetime tables
+- `imm_anime` - anime/series or YouTube channel metadata (`media_kind`) referenced by videos and lifetime tables
 - `imm_anime_title_aliases` - alternate titles that resolve to the same anime row
 - `imm_anime_merge_recommendations` - candidate duplicate-series merges surfaced in the dashboard
 - `imm_sessions` - session UUID, video reference, timing/status, final denormalized totals
