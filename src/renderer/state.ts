@@ -7,6 +7,7 @@ import type {
   TsukihimeEntry,
   TsukihimeSubtitleFile,
   JimakuEntry,
+  JimakuSearchCategory,
   JimakuFileEntry,
   KikuDuplicateCardInfo,
   KikuFieldGroupingChoice,
@@ -43,6 +44,7 @@ export type RendererState = {
   persistedSubtitlePosition: SubtitlePosition;
 
   jimakuModalOpen: boolean;
+  jimakuActiveTab: JimakuSearchCategory;
   jimakuEntries: JimakuEntry[];
   jimakuFiles: JimakuFileEntry[];
   selectedEntryIndex: number;
@@ -177,6 +179,7 @@ export function createRendererState(): RendererState {
     persistedSubtitlePosition: { yPercent: 10 },
 
     jimakuModalOpen: false,
+    jimakuActiveTab: 'anime',
     jimakuEntries: [],
     jimakuFiles: [],
     selectedEntryIndex: 0,

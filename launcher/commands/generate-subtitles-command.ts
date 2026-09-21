@@ -9,6 +9,10 @@ import {
 } from '../../src/core/services/subtitle-generation.js';
 import { requireSubtitleGenerationTools } from '../../src/core/services/subtitle-generation-tools.js';
 import {
+  readSubtitleGenerationReferences,
+  type SubtitleGenerationReference,
+} from '../../src/core/services/subtitle-generation-reference.js';
+import {
   resolveSubtitleGenerationConfig,
   type SubtitleGenerationProgress,
 } from '../../src/shared/subtitle-generation.js';
@@ -69,12 +73,9 @@ async function readMpvMedia(socketPath: string, command: GenerationCommandDeps['
   return localMediaPath(media, workingDirectory);
 }
 
-async function readMpvAudioStream(
-  socketPath: string,
-  command: GenerationCommandDeps['mpvCommand'],
-) {
-  const tracks = await command(socketPath, ['get_property', 'track-list'], 1000);
-  for (const track of Array.isArray(tracks) ? tracks : []) {
+function selectedMpvAudioStream(value: unknown) {
+  const tracks: unknown[] = Array.isArray(value) ? value : [];
+  for (const track of tracks) {
     if (
       typeof track === 'object' &&
       track !== null &&
@@ -160,11 +161,29 @@ export async function runGenerateSubtitlesCommand(
     const mediaPath = options.mediaPath ? localMediaPath(options.mediaPath) : currentMedia;
     if (!mediaPath)
       throw new Error('Pass a local video file or open one in mpv before running generate-subs.');
+    // Capture audio and subtitle timing together before model setup can yield to playback changes.
+    const matchesCurrentMedia = currentMedia !== null && sameFile(currentMedia, mediaPath);
+    const tracks = matchesCurrentMedia
+      ? await deps
+          .mpvCommand(context.mpvSocketPath, ['get_property', 'track-list'], 1000)
+          .catch(() => null)
+      : null;
+    let references: SubtitleGenerationReference[] = [];
+    if (matchesCurrentMedia) {
+      const candidates = await readSubtitleGenerationReferences(tracks, (name) =>
+        deps.mpvCommand(context.mpvSocketPath, ['get_property', name], 1000),
+      );
+      const stillPlaying = await readMpvMedia(context.mpvSocketPath, deps.mpvCommand).catch(
+        () => null,
+      );
+      if (stillPlaying && sameFile(stillPlaying, mediaPath)) references = candidates;
+      else if (!options.mediaPath && options.audioStreamIndex === undefined)
+        throw new Error(
+          'The current mpv media changed or could not be verified while reading tracks. Run generate-subs again.',
+        );
+    }
     const audioStreamIndex =
-      options.audioStreamIndex ??
-      (!options.mediaPath
-        ? await readMpvAudioStream(context.mpvSocketPath, deps.mpvCommand)
-        : undefined);
+      options.audioStreamIndex ?? (!options.mediaPath ? selectedMpvAudioStream(tracks) : undefined);
     const onProgress = createGenerationProgressReporter(write);
     // Missing executables fail here, before any model download starts.
     requireSubtitleGenerationTools(await deps.resolveTools(config));
@@ -183,6 +202,7 @@ export async function runGenerateSubtitlesCommand(
       modelDirectory,
       mediaPath,
       audioStreamIndex,
+      references,
       outputPath: options.outputPath
         ? path.resolve(resolvePathMaybe(options.outputPath))
         : undefined,

@@ -278,6 +278,7 @@ export function createAnimeBrowserPlayback(options: AnimeBrowserPlaybackOptions)
               onEndFile: deps.onPlaybackEndFile,
               readProperty: deps.readMpvProperty,
               wait,
+              isCurrent,
             })
           : null;
 

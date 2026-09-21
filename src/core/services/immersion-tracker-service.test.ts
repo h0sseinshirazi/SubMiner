@@ -3060,7 +3060,27 @@ test('startup repairs existing Jellyfin stream video links to metadata rows', as
     const titledStreamUrl =
       'http://jellyfin.local/Videos/item-10/stream?static=true&api_key=secret-token&MediaSourceId=ms-2';
     tracker.handleMediaChange(titledStreamUrl, 'KonoSuba S01E06 Decision! Class Rep');
+    tracker.handleMediaTitleUpdate('stream?static=true&api_key=secret-token');
     tracker.handleMediaChange(null, null);
+    // Safety must hold before metadata registration or a startup repair can run.
+    const liveDb = (tracker as unknown as { db: DatabaseSync }).db;
+    const persistedRows = liveDb.prepare('SELECT * FROM imm_videos').all();
+    assert.equal(JSON.stringify(persistedRows).includes('secret-token'), false);
+    assert.equal(JSON.stringify(persistedRows).includes('/stream'), false);
+    // Recreate the old on-disk representation to retain coverage of startup repair.
+    liveDb
+      .prepare(
+        'UPDATE imm_videos SET video_key = ?, source_url = ?, canonical_title = ? WHERE source_url = ?',
+      )
+      .run(
+        `remote:${streamUrl}`,
+        streamUrl,
+        'stream?static=true&api_key=secret-token',
+        'jellyfin://jellyfin.local/item/item-9',
+      );
+    liveDb
+      .prepare('UPDATE imm_videos SET video_key = ?, source_url = ? WHERE source_url = ?')
+      .run(`remote:${titledStreamUrl}`, titledStreamUrl, 'jellyfin://jellyfin.local/item/item-10');
     tracker.recordJellyfinPlaybackMetadata({
       mediaPath: 'http://jellyfin.local/Videos/item-9/stream?static=true&api_key=secret-token',
       displayTitle: 'Frieren S01E09 Aura the Guillotine',
@@ -3155,6 +3175,90 @@ test('startup repairs existing Jellyfin stream video links to metadata rows', as
     assert.equal(
       sessionRows.some((row) => row.source_url?.includes('api_key=')),
       false,
+    );
+  } finally {
+    tracker?.destroy();
+    cleanupDbPath(dbPath);
+  }
+});
+
+test('startup clears leaked parser metadata on safely titled anime without changing assignments', async () => {
+  const dbPath = makeDbPath();
+  let tracker: ImmersionTrackerService | null = null;
+  try {
+    const Ctor = await loadTrackerCtor();
+    tracker = new Ctor({ dbPath });
+    tracker.recordJellyfinPlaybackMetadata({
+      mediaPath: 'https://jellyfin.example/Videos/item/stream?api_key=test-secret',
+      displayTitle: 'My Anime S01E01',
+      itemTitle: 'Episode 1',
+      seriesTitle: 'My Anime',
+      seasonNumber: 1,
+      episodeNumber: 1,
+      itemId: 'item',
+    });
+    const db = (tracker as unknown as { db: DatabaseSync }).db;
+    db.prepare('UPDATE imm_anime SET metadata_json = ?').run(
+      JSON.stringify({
+        filename: 'stream?api_key=test-secret',
+        source: 'guessit',
+      }),
+    );
+    const before = db.prepare('SELECT video_id, anime_id FROM imm_videos').all();
+    tracker.destroy();
+    tracker = new Ctor({ dbPath });
+    const repairedDb = (tracker as unknown as { db: DatabaseSync }).db;
+    assert.deepEqual(repairedDb.prepare('SELECT video_id, anime_id FROM imm_videos').all(), before);
+    assert.deepEqual(
+      repairedDb.prepare('SELECT canonical_title, metadata_json FROM imm_anime').all(),
+      [{ canonical_title: 'My Anime Season 1', metadata_json: null }],
+    );
+  } finally {
+    tracker?.destroy();
+    cleanupDbPath(dbPath);
+  }
+});
+
+test('Jellyfin metadata cleanup requires both an API key and a stream marker', async () => {
+  const dbPath = makeDbPath();
+  let tracker: ImmersionTrackerService | null = null;
+  try {
+    const Ctor = await loadTrackerCtor();
+    tracker = new Ctor({ dbPath });
+    const db = (tracker as unknown as { db: DatabaseSync }).db;
+    const timestamp = toDbTimestamp(trackerNowMs());
+    const cases = [
+      { filename: 'stream?api_key=secret', leaked: true },
+      { filename: '/STREAM?API_KEY=secret', leaked: true },
+      { filename: '/Videos/item?api_key=secret', leaked: true },
+      { filename: 'MediaSourceId=item api key secret', leaked: true },
+      { filename: 'An API Key Story', leaked: false },
+      { filename: 'api_key=ordinary-metadata', leaked: false },
+      { filename: 'stream?quality=high', leaked: false },
+      { filename: '/Videos/item', leaked: false },
+      { filename: 'MediaSourceId=item', leaked: false },
+    ];
+    for (const [index, entry] of cases.entries()) {
+      db.prepare(
+        `
+        INSERT INTO imm_anime (
+          normalized_title_key, canonical_title, metadata_json, CREATED_DATE, LAST_UPDATE_DATE
+        ) VALUES (?, ?, ?, ?, ?)
+      `,
+      ).run(
+        `show-${index}`,
+        `Show ${index}`,
+        JSON.stringify({ filename: entry.filename }),
+        timestamp,
+        timestamp,
+      );
+    }
+    repairJellyfinStreamVideoLinks(db);
+    assert.deepEqual(
+      db.prepare('SELECT metadata_json FROM imm_anime ORDER BY anime_id').all(),
+      cases.map(({ filename, leaked }) => ({
+        metadata_json: leaked ? null : JSON.stringify({ filename }),
+      })),
     );
   } finally {
     tracker?.destroy();

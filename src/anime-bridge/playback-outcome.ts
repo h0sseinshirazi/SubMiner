@@ -26,10 +26,12 @@ export interface WatchPlaybackOutcomeDeps {
   /** One-shot mpv property read; may reject while the file is still loading. */
   readProperty: (name: string) => Promise<unknown>;
   wait: (ms: number) => Promise<void>;
-  /** Injectable clock; the timeout is wall-clock, not a probe count. */
+  /** Injectable clock for the initial confirmation deadline. */
   now?: () => number;
   timeoutMs?: number;
   probeIntervalMs?: number;
+  /** Stop watching when a newer episode replaces this request or the app closes. */
+  isCurrent?: () => boolean;
 }
 
 export interface PlaybackOutcomeWatch {
@@ -49,6 +51,7 @@ export function watchPlaybackOutcome(deps: WatchPlaybackOutcomeDeps): PlaybackOu
   const probeIntervalMs = deps.probeIntervalMs ?? DEFAULT_PROBE_INTERVAL_MS;
 
   let failure: PlaybackOutcome | null = null;
+  let disposed = false;
   const unsubscribe = deps.onEndFile((event) => {
     if (event.reason !== 'error') return;
     failure = {
@@ -60,11 +63,11 @@ export function watchPlaybackOutcome(deps: WatchPlaybackOutcomeDeps): PlaybackOu
   });
 
   async function wait(): Promise<PlaybackOutcome> {
-    // Wall-clock, not a probe count: a slow `readProperty` must eat into the
-    // budget rather than stretch it, and a zero probe interval must still end.
+    // Use elapsed time rather than probe count before checking whether mpv is
+    // still active. Slow property reads count toward this initial deadline.
     const now = deps.now ?? Date.now;
     const deadline = now() + timeoutMs;
-    while (now() < deadline) {
+    while (!disposed && (deps.isCurrent?.() ?? true)) {
       if (failure) return failure;
       try {
         if ((await deps.readProperty('vo-configured')) === true) return { ok: true };
@@ -72,10 +75,17 @@ export function watchPlaybackOutcome(deps: WatchPlaybackOutcomeDeps): PlaybackOu
         // The property is unreadable while mpv is between files; keep polling.
       }
       if (failure) return failure;
-      // Sleeping past the deadline would only delay the timeout report.
+      // A deadline without video is not a failure while mpv is still opening
+      // the stream. Keep waiting for video or a real end-file error in that case.
       const remaining = deadline - now();
-      if (remaining <= 0) break;
-      await deps.wait(Math.min(probeIntervalMs, remaining));
+      if (remaining <= 0) {
+        try {
+          if ((await deps.readProperty('idle-active')) !== false) break;
+        } catch {
+          break;
+        }
+      }
+      await deps.wait(remaining > 0 ? Math.min(probeIntervalMs, remaining) : probeIntervalMs);
     }
     return (
       failure ?? {
@@ -85,5 +95,11 @@ export function watchPlaybackOutcome(deps: WatchPlaybackOutcomeDeps): PlaybackOu
     );
   }
 
-  return { wait, dispose: unsubscribe };
+  return {
+    wait,
+    dispose: () => {
+      disposed = true;
+      unsubscribe();
+    },
+  };
 }

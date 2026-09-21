@@ -1,6 +1,7 @@
 import path from 'node:path';
 import * as fs from 'node:fs';
 import { createLogger } from '../../logger';
+import { sanitizeMediaTitle, toMediaIdentityPath } from '../../shared/media-identity';
 import { MediaGenerator } from '../../media-generator';
 import type { CoverArtFetcher } from './anilist/cover-art-fetcher';
 import { getLocalVideoMetadata, guessAnimeVideoMetadata } from './immersion-tracker/metadata';
@@ -395,7 +396,7 @@ function normalizeMetadataInt(value: number | null | undefined): number | null {
 function buildJellyfinStatsMediaPath(mediaPath: string, itemId: string): string {
   const normalizedItemId = normalizeText(itemId);
   if (!normalizedItemId) {
-    return mediaPath;
+    return toMediaIdentityPath(mediaPath);
   }
   try {
     const parsed = new URL(mediaPath);
@@ -1660,11 +1661,11 @@ export class ImmersionTrackerService {
     }
     const statsPath = buildJellyfinStatsMediaPath(rawPath, metadata.itemId);
     const displayTitle =
-      normalizeText(metadata.displayTitle) ||
-      normalizeText(metadata.itemTitle) ||
+      normalizeText(sanitizeMediaTitle(metadata.displayTitle)) ||
+      normalizeText(sanitizeMediaTitle(metadata.itemTitle)) ||
       deriveCanonicalTitle(statsPath);
-    const itemTitle = normalizeText(metadata.itemTitle) || displayTitle;
-    const seriesTitle = normalizeText(metadata.seriesTitle);
+    const itemTitle = normalizeText(sanitizeMediaTitle(metadata.itemTitle)) || displayTitle;
+    const seriesTitle = normalizeText(sanitizeMediaTitle(metadata.seriesTitle));
     const libraryTitle = seriesTitle || itemTitle;
     const seasonNumber = normalizeMetadataInt(metadata.seasonNumber);
     const episodeNumber = normalizeMetadataInt(metadata.episodeNumber);
@@ -1829,8 +1830,8 @@ export class ImmersionTrackerService {
     const normalizedPath =
       buildMediaPathAliasCandidates(rawPath)
         .map((alias) => this.mediaPathAliases.get(alias))
-        .find((alias): alias is string => Boolean(alias)) ?? rawPath;
-    const normalizedTitle = normalizeText(mediaTitle);
+        .find((alias): alias is string => Boolean(alias)) ?? toMediaIdentityPath(rawPath);
+    const normalizedTitle = normalizeText(sanitizeMediaTitle(mediaTitle));
     this.logger.info(
       `handleMediaChange called with path=${normalizedPath || '<empty>'} title=${normalizedTitle || '<empty>'}`,
     );
@@ -1888,7 +1889,7 @@ export class ImmersionTrackerService {
 
   handleMediaTitleUpdate(mediaTitle: string | null): void {
     if (!this.sessionState) return;
-    const normalizedTitle = normalizeText(mediaTitle);
+    const normalizedTitle = normalizeText(sanitizeMediaTitle(mediaTitle));
     if (!normalizedTitle) return;
     this.currentVideoKey = normalizedTitle;
     this.updateVideoTitleForActiveSession(normalizedTitle);

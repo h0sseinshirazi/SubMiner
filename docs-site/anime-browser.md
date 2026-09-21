@@ -339,6 +339,10 @@ SubMiner waits until mpv actually configures a video output before reporting
 success. If mpv gives up instead — a dead host, an undecodable stream — the
 browser shows mpv's error rather than pretending playback started (a failed
 load leaves no mpv window, because the player idles windowless).
+Slow streams stay in the loading state while mpv is still opening them, even
+after the initial playback confirmation deadline. Loading ends when video
+appears, mpv reports an error or returns to idle, or another episode replaces
+the request.
 
 Failed requests appear in a dismissible panel at the bottom of the browser.
 It explains the failed action and suggests a next step. Expand **Technical

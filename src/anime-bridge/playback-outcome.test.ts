@@ -20,6 +20,8 @@ function createHarness(overrides?: {
   timeoutMs?: number;
   probeIntervalMs?: number;
   readCostMs?: number;
+  onWait?: (elapsedMs: number, harness: Harness) => void;
+  isCurrent?: () => boolean;
 }) {
   const listeners = new Set<(event: PlaybackEndFileEvent) => void>();
   const properties = new Map<string, unknown>();
@@ -39,10 +41,12 @@ function createHarness(overrides?: {
     },
     wait: async (ms) => {
       clock += ms;
+      overrides?.onWait?.(clock, harness);
     },
     now: () => clock,
     timeoutMs: overrides?.timeoutMs ?? 1000,
     probeIntervalMs: overrides?.probeIntervalMs ?? 100,
+    isCurrent: overrides?.isCurrent,
   });
 
   const harness: Harness = {
@@ -94,6 +98,76 @@ test('times out with a failure when nothing ever starts', async () => {
   watch.dispose();
 });
 
+test('waits for a slow stream that is still loading after the confirmation deadline', async () => {
+  const { watch, harness } = createHarness({
+    timeoutMs: 300,
+    onWait: (elapsedMs, state) => {
+      if (elapsedMs >= 600) state.setProperty('vo-configured', true);
+    },
+  });
+  harness.setProperty('idle-active', false);
+  assert.deepEqual(await watch.wait(), { ok: true });
+  assert.equal(harness.elapsed(), 600);
+  watch.dispose();
+});
+
+test('reports a real stream error after the confirmation deadline', async () => {
+  const { watch, harness } = createHarness({
+    timeoutMs: 300,
+    onWait: (elapsedMs, state) => {
+      if (elapsedMs >= 600) state.emitEndFile({ reason: 'error', fileError: 'HTTP 503' });
+    },
+  });
+  harness.setProperty('idle-active', false);
+  assert.deepEqual(await watch.wait(), {
+    ok: false,
+    error: 'mpv could not play this stream: HTTP 503',
+  });
+  watch.dispose();
+});
+
+test('stops waiting if a slow stream leaves mpv idle', async () => {
+  const { watch, harness } = createHarness({
+    timeoutMs: 300,
+    onWait: (elapsedMs, state) => {
+      if (elapsedMs >= 600) state.setProperty('idle-active', true);
+    },
+  });
+  harness.setProperty('idle-active', false);
+  assert.equal((await watch.wait()).ok, false);
+  assert.equal(harness.elapsed(), 600);
+  watch.dispose();
+});
+
+test('stops watching a slow stream when the request is superseded', async () => {
+  let current = true;
+  const { watch, harness } = createHarness({
+    timeoutMs: 300,
+    isCurrent: () => current,
+    onWait: (elapsedMs) => {
+      if (elapsedMs >= 600) current = false;
+    },
+  });
+  harness.setProperty('idle-active', false);
+  assert.equal((await watch.wait()).ok, false);
+  assert.equal(harness.elapsed(), 600);
+  watch.dispose();
+  assert.equal(harness.listenerCount(), 0);
+});
+
+test('disposing the watcher stops polling a slow stream', async () => {
+  const { watch, harness } = createHarness({
+    timeoutMs: 300,
+    onWait: (elapsedMs) => {
+      if (elapsedMs >= 600) watch.dispose();
+    },
+  });
+  harness.setProperty('idle-active', false);
+  assert.equal((await watch.wait()).ok, false);
+  assert.equal(harness.elapsed(), 600);
+  assert.equal(harness.listenerCount(), 0);
+});
+
 test('slow property reads eat the budget instead of extending it', async () => {
   const { watch, harness } = createHarness({
     timeoutMs: 300,
@@ -102,7 +176,7 @@ test('slow property reads eat the budget instead of extending it', async () => {
   });
   const outcome = await watch.wait();
   assert.equal(outcome.ok, false);
-  // Two probes: 250 + 50 (the sleep clamped to what was left) then 250 again.
+  // Property reads and the final idle check all count toward elapsed time.
   assert.ok(harness.elapsed() >= 300, 'gave up before the timeout');
   assert.ok(harness.elapsed() < 900, 'read delays stretched the timeout');
   watch.dispose();

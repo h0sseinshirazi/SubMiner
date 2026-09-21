@@ -32,6 +32,7 @@ import {
   type MediaTimingReviewRequest,
 } from './types/anki';
 import { AiConfig } from './types/integrations';
+import { sanitizeMediaTitle } from './shared/media-identity';
 import type { KnownWordMaturityTier } from './types/subtitle';
 import { MpvClient } from './types/runtime';
 import { OPEN_ANKI_CARD_ACTION_ID } from './types/notification';
@@ -1117,9 +1118,11 @@ export class AnkiIntegration {
       return null;
     }
     const mediaRange = this.getSubtitleMediaRange(context);
-    const timestamp = context
-      ? mediaRange.startTime + (mediaRange.endTime - mediaRange.startTime) / 2
-      : this.mpvClient.currentTimePos || 0;
+    const timestamp =
+      context?.screenshotTime ??
+      (context
+        ? mediaRange.startTime + (mediaRange.endTime - mediaRange.startTime) / 2
+        : this.mpvClient.currentTimePos || 0);
 
     if (this.config.media?.imageType === 'avif') {
       return this.mediaGenerator.generateAnimatedImage(
@@ -1165,11 +1168,13 @@ export class AnkiIntegration {
     }
 
     const videoFilename = extractFilenameFromMediaPath(mediaPath);
-    const resolvedMediaTitle = trimToNonEmptyString(mediaTitle);
+    const resolvedMediaTitle = sanitizeMediaTitle(mediaTitle);
     const filenameWithExt =
       (shouldPreferMediaTitleForMiscInfo(mediaPath, videoFilename)
-        ? resolvedMediaTitle || videoFilename
-        : videoFilename || resolvedMediaTitle) || fallbackFilename;
+        ? resolvedMediaTitle || 'Unknown media'
+        : sanitizeMediaTitle(videoFilename) || resolvedMediaTitle) ||
+      sanitizeMediaTitle(fallbackFilename) ||
+      'Unknown media';
     const filenameWithoutExt = filenameWithExt.replace(/\.[^.]+$/, '');
 
     const currentTimePos =
@@ -1794,6 +1799,8 @@ export class AnkiIntegration {
       ...request,
       audioPadding: Math.max(0, this.config.media.audioPadding ?? 0),
       maxMediaDuration: Math.max(0, this.config.media.maxMediaDuration ?? 30),
+      screenshotEnabled:
+        this.config.media.generateImage !== false && this.config.media.imageType !== 'avif',
     });
   }
 

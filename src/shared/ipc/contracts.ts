@@ -166,6 +166,7 @@ export const IPC_CHANNELS = {
     animeBrowserRemoveRepo: 'anime-browser:remove-repo',
     mediaTimingReviewPreview: 'media-timing-review:preview',
     mediaTimingReviewWaveform: 'media-timing-review:waveform',
+    mediaTimingReviewFrame: 'media-timing-review:frame',
     mediaTimingReviewStopPreview: 'media-timing-review:stop-preview',
     mediaTimingReviewResolve: 'media-timing-review:resolve',
   },

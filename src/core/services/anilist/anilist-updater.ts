@@ -2,6 +2,7 @@ import * as childProcess from 'child_process';
 import * as path from 'path';
 
 import { parseMediaInfo } from '../../../jimaku/utils';
+import { resolveMediaLookupTarget, sanitizeMediaTitle } from '../../../shared/media-identity';
 import type { AnilistRateLimiter } from './rate-limiter';
 import { resolveAnilistSeasonMedia } from './season-resolver';
 
@@ -231,8 +232,9 @@ export async function guessAnilistMediaInfo(
   mediaTitle: string | null,
   deps: GuessAnilistMediaInfoDeps = { runGuessit },
 ): Promise<AnilistMediaGuess | null> {
-  const target = mediaPath ?? mediaTitle;
-  const guessitTarget = mediaPath ? path.basename(mediaPath) : mediaTitle;
+  const target = resolveMediaLookupTarget(mediaPath, mediaTitle);
+  if (!target) return null;
+  const guessitTarget = target === sanitizeMediaTitle(mediaTitle) ? target : path.basename(target);
 
   if (guessitTarget && guessitTarget.trim().length > 0) {
     try {
@@ -260,8 +262,7 @@ export async function guessAnilistMediaInfo(
     }
   }
 
-  const fallbackTarget = mediaPath ?? mediaTitle;
-  const parsed = parseMediaInfo(fallbackTarget);
+  const parsed = parseMediaInfo(target);
   if (!parsed.title.trim()) {
     return null;
   }
