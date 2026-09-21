@@ -144,7 +144,7 @@ const INTEGRATION_TEMPLATE_SECTIONS: ConfigTemplateSection[] = [
     title: 'AnkiConnect Integration',
     description: ['Automatic Anki updates and media generation options.'],
     notes: [
-      'Hot-reload: ankiConnect.ai.enabled, media.normalizeAudio/mirrorMpvVolume/reviewTiming, knownWords, nPlusOne, fields.word/audio/image/sentence/miscInfo, behavior.autoUpdateNewCards, isLapis.sentenceCardModel, isKiku.fieldGrouping, isSenren.fieldGrouping, and lapisKiku.wordCardKind update live while SubMiner is running.',
+      'Hot-reload: ankiConnect.ai.enabled, media.normalizeAudio/mirrorMpvVolume/reviewTiming, knownWords, nPlusOne, fields.word/audio/wordAudio/image/sentence/miscInfo, behavior.autoUpdateNewCards, isLapis.sentenceCardModel, isKiku.fieldGrouping, isSenren.fieldGrouping, and lapisKiku.wordCardKind update live while SubMiner is running.',
       'Shared AI provider transport settings are read from top-level ai and typically require restart.',
       'Most other AnkiConnect settings still require restart.',
     ],
@@ -174,6 +174,14 @@ const INTEGRATION_TEMPLATE_SECTIONS: ConfigTemplateSection[] = [
     ],
     notes: ['Hot-reload: TsukiHime changes apply to the next TsukiHime request.'],
     key: 'tsukihime',
+  },
+  {
+    title: 'TMDB',
+    description: [
+      'TMDB (The Movie Database) metadata for live-action dramas and movies in the stats Library: posters, synopses, and grouping by show.',
+    ],
+    notes: ['Hot-reload: TMDB changes apply to the next TMDB request.'],
+    key: 'tmdb',
   },
   {
     title: 'YouTube Playback Settings',

@@ -1,3 +1,26 @@
+export function createForceQuitHandler(deps: {
+  destroyImmersionTracker: () => void | Promise<void>;
+  logError: (error: unknown) => void;
+  exit: () => void;
+}) {
+  return async () => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve().then(() => deps.destroyImmersionTracker()),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Stats finalization timed out.')), 1_000);
+        }),
+      ]);
+    } catch (error) {
+      deps.logError(error);
+    } finally {
+      clearTimeout(timeout);
+      deps.exit();
+    }
+  };
+}
+
 export function createOnWillQuitCleanupHandler(deps: {
   destroyTray: () => void;
   stopConfigHotReload: () => void;
@@ -18,6 +41,7 @@ export function createOnWillQuitCleanupHandler(deps: {
   destroyMpvSocket: () => void;
   clearReconnectTimer: () => void;
   destroySubtitleTimingTracker: () => void;
+  stopStatsServer: () => Promise<void> | void;
   destroyImmersionTracker: () => void | Promise<void>;
   destroyAnkiIntegration: () => void;
   destroyAnilistSetupWindow: () => void;
@@ -61,7 +85,16 @@ export function createOnWillQuitCleanupHandler(deps: {
     deps.destroyMpvSocket();
     deps.clearReconnectTimer();
     deps.destroySubtitleTimingTracker();
-    await deps.destroyImmersionTracker();
+    try {
+      await deps.stopStatsServer();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    try {
+      await deps.destroyImmersionTracker();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
     deps.destroyAnkiIntegration();
     deps.destroyAnilistSetupWindow();
     deps.clearAnilistSetupWindow();

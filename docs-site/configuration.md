@@ -157,6 +157,7 @@ The configuration file includes several main sections:
 - [**Anime Browser**](#anime-browser) - Extension repositories and stream preferences for the anime browser
 - [**Jimaku**](#jimaku) - Jimaku API configuration and defaults
 - [**TsukiHime**](#tsukihime) - Multi-language subtitle search and download
+- [**TMDB**](#tmdb) - Posters and synopses for live-action dramas and movies in the stats Library
 - [**Subtitle Sync**](#subtitle-sync) - Sync current subtitle with `alass`/`ffsubsync`
 - [**AniList**](#anilist) - Optional post-watch progress updates
 - [**Yomitan**](#yomitan) - Reuse an external read-only Yomitan profile
@@ -977,7 +978,8 @@ This example is intentionally compact. The option table below documents availabl
 | `tags`                                            | array of strings                            | Tags automatically added to cards mined/updated by SubMiner (default: `['SubMiner']`; set `[]` to disable automatic tagging).                                                                                                   |
 | `ankiConnect.deck`                                | string                                      | Restrict duplicate detection and card enrichment to this Anki deck. Leave empty to use the Yomitan mining deck when available. In Settings, this dropdown auto-fills and persists Yomitan's current mining deck when available. |
 | `fields.word`                                     | string                                      | Card field for mined word / expression text (default: `Expression`)                                                                                                                                                             |
-| `fields.audio`                                    | string                                      | Card field for the generated sentence audio clip (default: `ExpressionAudio`). Set this to a dedicated field such as `SentenceAudio` so it does not collide with the word audio Yomitan writes.                                 |
+| `fields.audio`                                    | string                                      | Card field for the generated sentence audio clip (default: `ExpressionAudio`). Set this to a dedicated field such as `SentenceAudio` so it does not collide with the word audio Yomitan writes.                                  |
+| `fields.wordAudio`                                | string                                      | Existing word-audio field read for the animated image's opening freeze. Independent of the sentence-audio destination in `fields.audio`; this mapping does not write audio. See [config.example.jsonc](/config.example.jsonc) for defaults. |
 | `fields.image`                                    | string                                      | Card field for images (default: `Picture`)                                                                                                                                                                                      |
 | `fields.sentence`                                 | string                                      | Card field for sentences (default: `Sentence`)                                                                                                                                                                                  |
 | `fields.miscInfo`                                 | string                                      | Card field for metadata (default: `"MiscInfo"`, set to `null` to disable)                                                                                                                                                       |
@@ -998,7 +1000,7 @@ This example is intentionally compact. The option table below documents availabl
 | `media.syncAnimatedImageToWordAudio`              | `true`, `false`                             | Whether animated AVIF includes an opening frame synced to sentence word-audio timing (default: `true`).                                                                                                                         |
 | `media.audioPadding`                              | number (seconds)                            | Optional padding around generated sentence media timing (default: `0`). Animated AVIF clips include the same padded source range as sentence audio.                                                                             |
 | `media.fallbackDuration`                          | number (seconds)                            | Default duration if timing unavailable (default: `3.0`)                                                                                                                                                                         |
-| `media.maxMediaDuration`                          | number (seconds)                            | Max duration for generated media from multi-line copy (default: `30`, `0` to disable)                                                                                                                                           |
+| `media.maxMediaDuration`                          | number (seconds)                            | Maximum generated clip duration for overlay and stats-dashboard mining. See the [configuration example](/config.example.jsonc) for the default and disabling the cap.                                                           |
 | `behavior.overwriteAudio`                         | `true`, `false`                             | Replace existing audio on updates; when `false`, new audio is appended/prepended using the configured media insert mode; manual clipboard updates always replace generated sentence audio (default: `true`)                     |
 | `behavior.overwriteImage`                         | `true`, `false`                             | Replace existing images on updates; when `false`, new images are appended/prepended using the configured media insert mode (default: `true`)                                                                                    |
 | `behavior.mediaInsertMode`                        | `"append"`, `"prepend"`                     | Where to insert new media when overwrite is off (default: `"append"`)                                                                                                                                                           |
@@ -1187,6 +1189,32 @@ TsukiHime subtitle search works out of the box and needs no account or API key. 
 The keyboard shortcut lives under `shortcuts.openTsukihime` (default `Ctrl+Shift+T`; set to `null` to disable). The older `animetosho` section and `shortcuts.openAnimetosho` are still accepted as deprecated aliases, with the current names taking precedence when both are set.
 
 See [TsukiHime Integration](/tsukihime-integration) for the modal workflow, language tabs, and troubleshooting.
+
+### TMDB
+
+TMDB (The Movie Database) supplies posters, synopses, and show grouping for live-action dramas and movies in the stats [Library](/immersion-tracking#library). AniList only covers anime, so TMDB is what gives live-action titles a cover and a description.
+
+Release builds ship with a project TMDB key, so nothing needs to be configured. Set your own key to use your own quota, or when running SubMiner from source, where no key is bundled. Create one for free under **Settings > API** on [themoviedb.org](https://www.themoviedb.org/settings/api); either the short API key or the long "API Read Access Token" works.
+
+```json
+{
+  "tmdb": {
+    "apiKey": "",
+    "apiKeyCommand": "cat ~/.tmdb_key"
+  }
+}
+```
+
+| Option               | Values | Description                                                                                        |
+| -------------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| `tmdb.apiKey`        | string | Your own TMDB API key or read access token; overrides the bundled key (default: empty)             |
+| `tmdb.apiKeyCommand` | string | Shell command that prints the key to stdout, used instead of `apiKey` to keep it out of the config |
+
+Successful `apiKeyCommand` output is cached for the running client until `tmdb.apiKey` or `tmdb.apiKeyCommand` changes. Failed or empty command output uses the bundled key when available and waits 30 seconds before the next request can retry the command. Changing either credential setting resets this cooldown.
+
+Changes apply to the next TMDB request without a restart.
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ### Japanese subtitle generation
 

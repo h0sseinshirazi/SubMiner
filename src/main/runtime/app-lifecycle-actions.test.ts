@@ -1,10 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createForceQuitHandler,
   createOnWillQuitCleanupHandler,
   createRestoreWindowsOnActivateHandler,
   createShouldRestoreWindowsOnActivateHandler,
 } from './app-lifecycle-actions';
+
+test('forced quit finalizes stats before exiting, even when finalization throws', async () => {
+  for (const fails of [false, true]) {
+    const calls: string[] = [];
+    await createForceQuitHandler({
+      destroyImmersionTracker: () => {
+        calls.push('finalize');
+        if (fails) throw new Error('flush failed');
+      },
+      logError: () => {
+        calls.push('error');
+      },
+      exit: () => {
+        calls.push('exit');
+      },
+    })();
+    assert.deepEqual(calls, fails ? ['finalize', 'error', 'exit'] : ['finalize', 'exit']);
+  }
+});
 
 test('on will quit cleanup handler runs all cleanup steps', async () => {
   const calls: string[] = [];
@@ -32,7 +52,13 @@ test('on will quit cleanup handler runs all cleanup steps', async () => {
     destroyMpvSocket: () => calls.push('destroy-socket'),
     clearReconnectTimer: () => calls.push('clear-reconnect'),
     destroySubtitleTimingTracker: () => calls.push('destroy-subtitle-tracker'),
-    destroyImmersionTracker: () => {
+    stopStatsServer: async () => {
+      calls.push('stop-stats-server-start');
+      await Promise.resolve();
+      calls.push('stop-stats-server-complete');
+    },
+    destroyImmersionTracker: async () => {
+      await Promise.resolve();
       calls.push('destroy-immersion');
     },
     destroyAnkiIntegration: () => calls.push('destroy-anki'),
@@ -54,7 +80,7 @@ test('on will quit cleanup handler runs all cleanup steps', async () => {
   });
 
   await cleanup();
-  assert.equal(calls.length, 36);
+  assert.equal(calls.length, 38);
   assert.equal(calls[0], 'destroy-tray');
   assert.equal(calls[calls.length - 1], 'stop-discord-presence');
   assert.ok(calls.includes('cleanup-jellyfin-subtitles'));
@@ -65,6 +91,8 @@ test('on will quit cleanup handler runs all cleanup steps', async () => {
   assert.ok(calls.includes('cleanup-youtube-media'));
   assert.ok(calls.includes('cleanup-remote-media-windows'));
   assert.ok(calls.indexOf('flush-mpv-log') < calls.indexOf('destroy-socket'));
+  assert.ok(calls.indexOf('stop-stats-server-complete') < calls.indexOf('destroy-immersion'));
+  assert.ok(calls.indexOf('destroy-immersion') < calls.indexOf('destroy-anki'));
 });
 
 for (const failedStep of [
@@ -108,6 +136,7 @@ for (const failedStep of [
       destroyMpvSocket: () => {},
       clearReconnectTimer: () => {},
       destroySubtitleTimingTracker: () => {},
+      stopStatsServer: () => {},
       destroyImmersionTracker: () => {},
       destroyAnkiIntegration: () => {},
       destroyAnilistSetupWindow: () => {},
@@ -140,6 +169,32 @@ for (const failedStep of [
     ]);
   });
 }
+
+test('forced quit waits for asynchronous stats finalization', async () => {
+  const calls: string[] = [];
+  await createForceQuitHandler({
+    destroyImmersionTracker: async () => {
+      await Promise.resolve();
+      calls.push('finalized');
+    },
+    logError: () => calls.push('error'),
+    exit: () => calls.push('exit'),
+  })();
+  assert.deepEqual(calls, ['finalized', 'exit']);
+});
+
+test('forced quit exits when asynchronous stats finalization never settles', async () => {
+  const calls: string[] = [];
+  await createForceQuitHandler({
+    destroyImmersionTracker: () => new Promise<void>(() => {}),
+    logError: (error) => {
+      assert.match(String(error), /Stats finalization timed out/);
+      calls.push('timeout');
+    },
+    exit: () => calls.push('exit'),
+  })();
+  assert.deepEqual(calls, ['timeout', 'exit']);
+});
 
 test('should restore windows on activate requires initialized runtime and no windows', () => {
   let initialized = false;

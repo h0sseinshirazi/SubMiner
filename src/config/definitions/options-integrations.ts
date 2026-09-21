@@ -83,6 +83,13 @@ export function buildIntegrationConfigOptionRegistry(
       description: 'Card field that receives generated sentence audio.',
     },
     {
+      path: 'ankiConnect.fields.wordAudio',
+      kind: 'string',
+      defaultValue: defaultConfig.ankiConnect.fields.wordAudio,
+      description:
+        'Existing word-audio field read to time the frozen first frame of animated images. This mapping is only used for synchronization.',
+    },
+    {
       path: 'ankiConnect.fields.image',
       kind: 'string',
       defaultValue: defaultConfig.ankiConnect.fields.image,
@@ -288,7 +295,7 @@ export function buildIntegrationConfigOptionRegistry(
       path: 'ankiConnect.media.maxMediaDuration',
       kind: 'number',
       defaultValue: defaultConfig.ankiConnect.media.maxMediaDuration,
-      description: 'Maximum allowed media clip duration in seconds.',
+      description: 'Maximum allowed media clip duration in seconds. 0 disables the cap.',
     },
     {
       path: 'ankiConnect.knownWords.matchMode',
@@ -471,6 +478,20 @@ export function buildIntegrationConfigOptionRegistry(
       kind: 'number',
       defaultValue: defaultConfig.tsukihime.maxSearchResults,
       description: 'Maximum TsukiHime search results returned.',
+    },
+    {
+      path: 'tmdb.apiKey',
+      kind: 'string',
+      defaultValue: defaultConfig.tmdb.apiKey,
+      description:
+        'Your own TMDB API key or read access token for live-action posters and synopses in the stats Library. Release builds bundle a project key, so set this only to use your own quota or when running from source (free under Settings > API on themoviedb.org).',
+    },
+    {
+      path: 'tmdb.apiKeyCommand',
+      kind: 'string',
+      defaultValue: defaultConfig.tmdb.apiKeyCommand,
+      description:
+        'Shell command that prints the TMDB API key to stdout. Used instead of apiKey to avoid storing the key in plain text.',
     },
     {
       path: 'anilist.enabled',

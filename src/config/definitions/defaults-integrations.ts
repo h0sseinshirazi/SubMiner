@@ -7,6 +7,7 @@ export const INTEGRATIONS_DEFAULT_CONFIG: Pick<
   | 'anime'
   | 'jimaku'
   | 'tsukihime'
+  | 'tmdb'
   | 'anilist'
   | 'mpv'
   | 'yomitan'
@@ -30,6 +31,7 @@ export const INTEGRATIONS_DEFAULT_CONFIG: Pick<
     fields: {
       word: 'Expression',
       audio: 'ExpressionAudio',
+      wordAudio: 'ExpressionAudio',
       image: 'Picture',
       sentence: 'Sentence',
       miscInfo: 'MiscInfo',
@@ -122,6 +124,10 @@ export const INTEGRATIONS_DEFAULT_CONFIG: Pick<
   tsukihime: {
     apiBaseUrl: 'https://api.tsukihime.org/v1',
     maxSearchResults: 10,
+  },
+  tmdb: {
+    apiKey: '',
+    apiKeyCommand: '',
   },
   mpv: {
     executablePath: '',
