@@ -188,6 +188,8 @@ Output format: MP3 at 44100 Hz. If the video has multiple audio streams, SubMine
 
 The audio is uploaded to Anki's media folder and inserted as `[sound:audio_<timestamp>.mp3]`.
 
+Overlay and stats-dashboard mining use the same `media.maxMediaDuration` limit. See the [configuration example](/config.example.jsonc) for its default and how to disable the cap.
+
 Set `media.reviewTiming` to `true` to pause playback and check the clip before its media is generated. It applies to word, sentence, and audio cards.
 
 The review opens on the subtitle range plus your configured audio padding. Subtitles usually hang around after the dialogue has stopped, so once the waveform loads, an untouched clip end pulls back to just after the last speech in the line. The Line end rail still marks the original subtitle timing, Reset puts it back, and a line whose speech runs right through its end is left alone.
