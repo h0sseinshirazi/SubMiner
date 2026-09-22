@@ -187,37 +187,28 @@ app
     assert.equal(tokens[1].endPos, 7);
     assert.equal(tokens[1].frequencyRank, 42);
     assert.deepEqual(tokens[1].wordClasses, ['v1']);
-    // Remove all term dictionaries before checking direct frequency queries.
-    for (const title of ['SubMiner Test Terms', 'SubMiner Character Dictionary (AniList 1)']) {
-      assert.equal(await parser.deleteYomitanDictionaryByTitle(title, deps, logger), true);
-    }
-    parser.clearYomitanParserCachesForWindow(parserWindow);
     const exact = await parser.requestYomitanTermFrequencies(
-      [{ term: '頻度だけ', reading: 'ひんどだけ' }],
+      [{ term: '食べる', reading: 'たべる' }],
       deps,
       logger,
     );
-    assert.deepEqual(
-      exact.map((value) => value.frequency).sort((a, b) => a - b),
-      [17, 120],
+    assert.equal(exact.length, 1);
+    assert.equal(exact[0].frequency, 42);
+    assert.equal(exact[0].reading, 'たべる');
+    assert.equal(exact[0].hasReading, false);
+    const otherReading = await parser.requestYomitanTermFrequencies(
+      [{ term: '食べる', reading: 'べつのよみ' }],
+      deps,
+      logger,
     );
-    assert.ok(
-      exact.some(
-        (value) => value.frequency === 120 && value.hasReading && value.reading === 'ひんどだけ',
-      ),
-    );
-    assert.ok(
-      exact.some((value) => value.frequency === 17 && !value.hasReading && value.reading === null),
-    );
-    const allReadings = await parser.requestYomitanTermFrequencies(
+    // The shared frequency pipeline retries a missing reading as a term-only query.
+    assert.equal(otherReading[0]?.frequency, 42);
+    const unmatched = await parser.requestYomitanTermFrequencies(
       [{ term: '頻度だけ', reading: null }],
       deps,
       logger,
     );
-    assert.deepEqual(
-      allReadings.map((value) => value.frequency).sort((a, b) => a - b),
-      [17, 120, 250],
-    );
+    assert.deepEqual(unmatched, []);
     assert.equal(await parser.getYomitanCurrentAnkiDeckName(deps, logger), 'Test Mining');
     assert.equal((await targetSession.extensions.getAllExtensions()).length, 1);
     assert.equal(
@@ -236,7 +227,7 @@ app
     assert.deepEqual(await parser.getYomitanDictionaryInfo(deps, logger), []);
     assert.equal(errors.length, 0);
     console.log(
-      'PASS Hachidori native import, scanner, character names, frequency-only dictionaries, reading provenance, settings and removal',
+      'PASS Hachidori native import, scanner, character names, term-entry API frequencies, settings and removal',
     );
     clearTimeout(deadline);
     app.exit(0);

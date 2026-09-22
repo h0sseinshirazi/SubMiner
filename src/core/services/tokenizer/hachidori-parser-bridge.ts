@@ -138,30 +138,27 @@ export const HACHIDORI_PARSER_BRIDGE_SCRIPT = String.raw`
       }
     }
     async function getTermFrequencies({ termReadingList, dictionaries }) {
-      let frequencies;
-      try {
-        ({ frequencies } = await engine('hd_frequencies', { termReadingList }));
-      } catch (error) {
-        const { sharing } = await send('hd_sharing_status', {}, 'hachidori-sharing');
-        if (!sharing?.client?.connected || !/unknown|unsupported|not supported/i.test(error.message)) throw error;
-        // Older external hosts expose frequency data through term lookups only.
-        frequencies = [];
-        for (const { term, reading } of termReadingList) {
-          const { results } = await engine('hd_lookup', { text: term, maxResults: 100 });
-          for (const result of results) {
-            if (result.term.expression !== term || (reading !== null && result.term.reading !== reading)) continue;
-            for (const group of result.term.frequencies) {
-              for (const value of group.frequencies) {
-                frequencies.push({ term, reading: value.reading || null,
-                  hasReading: typeof value.reading === 'string' && value.reading.length > 0,
-                  dictionary: group.dictionary, frequency: value.value,
-                  displayValue: value.displayValue || null, displayValueParsed: false });
-              }
-            }
+      const terms = [...new Set(termReadingList.map(pair => pair.term))];
+      const { results } = await api({ type: 'hd_api_term_entries', terms });
+      const frequencies = [];
+      for (const result of results) {
+        const term = terms[result.index];
+        const pairs = termReadingList.filter(pair => pair.term === term);
+        for (const entry of result.dictionaryEntries) {
+          for (const value of entry.frequencies) {
+            const headword = entry.headwords[value.headwordIndex];
+            if (!headword || headword.term !== term || !dictionaries.includes(value.dictionary)) continue;
+            if (!pairs.some(pair => pair.reading === null || pair.reading === headword.reading)) continue;
+            // Upstream does not expose the frequency entry's original reading.
+            // Keep its API flag and associate the value with the matched headword.
+            frequencies.push({ term, reading: headword.reading || null,
+              hasReading: value.hasReading, dictionary: value.dictionary,
+              frequency: value.frequency, displayValue: value.displayValue,
+              displayValueParsed: value.displayValueParsed });
           }
         }
       }
-      return frequencies.filter(frequency => dictionaries.includes(frequency.dictionary));
+      return frequencies;
     }
     // Hachidori's public tokenize API emits display furigana without headwords.
     // SubMiner's fallback requires one group per token and a dictionary form.

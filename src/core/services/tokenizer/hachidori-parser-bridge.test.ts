@@ -116,20 +116,6 @@ async function createHarness(emptyLibrary = false) {
                 results: candidates.filter((result) => text.startsWith(result.matched)),
               };
             }
-            case 'hd_frequencies':
-              return {
-                ok: true,
-                frequencies: [
-                  {
-                    term: '食べる',
-                    reading: 'たべる',
-                    hasReading: true,
-                    dictionary: 'Frequency',
-                    frequency: 42,
-                    displayValue: null,
-                  },
-                ],
-              };
             case 'hd_options_write': {
               if (message.baseRevision !== optionRevision) return { ok: false, error: 'conflict' };
               const update = message.options;
@@ -252,6 +238,28 @@ test('Hachidori runs the shared scanner with inflected offsets, headwords, names
   );
   assert.equal(frequencies[0]?.frequency, 42);
   assert.equal(frequencies[0]?.dictionary, 'Frequency');
+});
+
+test('Hachidori frequency lookups match API headwords, readings and requested dictionaries', async () => {
+  const harness = await createHarness();
+  const query = (term: string, reading: string | null, dictionaries = ['Frequency']) =>
+    harness.invoke('getTermFrequencies', { termReadingList: [{ term, reading }], dictionaries });
+  assert.deepEqual(await query('食べる', 'たべる'), [
+    {
+      term: '食べる',
+      reading: 'たべる',
+      hasReading: false,
+      dictionary: 'Frequency',
+      frequency: 42,
+      displayValue: null,
+      displayValueParsed: false,
+    },
+  ]);
+  assert.deepEqual(await query('食べる', 'べつのよみ'), []);
+  assert.deepEqual(await query('食べる', null, ['Other frequency']), []);
+  assert.deepEqual(await query('食べるだけ', null), []);
+  assert.deepEqual(await query('頻度だけ', null), []);
+  assert.deepEqual(await query('食べる', null), await query('食べる', 'たべる'));
 });
 
 test('Hachidori syncs the Anki endpoint and every term template through revisioned writes', async () => {
