@@ -61,6 +61,65 @@ test('Yomitan restores direct Anki after disabling its managed proxy without a p
   assert.equal(managedUrl, null);
 });
 
+for (const failure of ['optionsGetFull', 'setAllSettings', 'storageSet']) {
+  test(`Yomitan retries disabling its managed proxy after ${failure} fails`, async () => {
+    const proxyUrl = 'http://127.0.0.1:8766';
+    const directUrl = 'http://127.0.0.1:8765';
+    let options = { profiles: [{ options: { anki: { server: proxyUrl } } }] };
+    let managedUrl: string | null = proxyUrl;
+    let shouldFail = true;
+    const context = vm.createContext({
+      chrome: {
+        storage: {
+          local: {
+            get: async () => ({ subminerAnkiProxyUrl: managedUrl }),
+            set: async (value: { subminerAnkiProxyUrl: string | null }) => {
+              if (shouldFail && failure === 'storageSet') throw new Error('Storage unavailable');
+              managedUrl = value.subminerAnkiProxyUrl;
+            },
+          },
+        },
+        runtime: {
+          sendMessage: (
+            message: { action: string; params?: { value: typeof options } },
+            callback: (response: { result?: unknown; error?: { message: string } }) => void,
+          ) => {
+            if (shouldFail && message.action === failure) {
+              callback({ error: { message: 'Settings unavailable' } });
+            } else if (message.action === 'optionsGetFull') {
+              callback({ result: structuredClone(options) });
+            } else if (message.action === 'setAllSettings' && message.params) {
+              options = structuredClone(message.params.value);
+              callback({ result: null });
+            } else {
+              assert.fail(`Unexpected action: ${message.action}`);
+            }
+          },
+        },
+      },
+    });
+    const deps = createDeps(async (script) =>
+      structuredClone(await vm.runInContext(script, context)),
+    );
+    const errors: string[] = [];
+    const logger = { error: (message: string) => errors.push(message) };
+
+    assert.equal(await syncYomitanDefaultAnkiServer(directUrl, deps, logger), false);
+    assert.equal(managedUrl, proxyUrl);
+    assert.equal(
+      options.profiles[0]?.options.anki.server,
+      failure === 'storageSet' ? directUrl : proxyUrl,
+    );
+    assert.equal(errors.length, 1);
+
+    shouldFail = false;
+    assert.equal(await syncYomitanDefaultAnkiServer(directUrl, deps, logger), true);
+    assert.equal(options.profiles[0]?.options.anki.server, directUrl);
+    assert.equal(managedUrl, null);
+    assert.equal(errors.length, 1);
+  });
+}
+
 test('syncYomitanDefaultAnkiServer updates default profile server when script reports update', async () => {
   let scriptValue = '';
   const deps = createDeps(async (script) => {

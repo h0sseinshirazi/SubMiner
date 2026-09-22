@@ -1442,7 +1442,6 @@ export async function syncYomitanDefaultAnkiServer(
         });
       }
       const { subminerAnkiProxyUrl: previousManagedProxy } = await chrome.storage.local.get('subminerAnkiProxyUrl');
-      await chrome.storage.local.set({ subminerAnkiProxyUrl: forceOverride ? targetServer : null });
       const optionsFull = await invoke("optionsGetFull", undefined);
       const profiles = Array.isArray(optionsFull.profiles) ? optionsFull.profiles : [];
       if (profiles.length === 0) {
@@ -1472,6 +1471,8 @@ export async function syncYomitanDefaultAnkiServer(
           forceOverride || currentServer.length === 0 || currentServer === "http://127.0.0.1:8765" ||
           (typeof previousManagedProxy === 'string' && currentServer === previousManagedProxy);
         if (!canReplaceCurrent) {
+          // A custom endpoint needs no settings change, but the proxy is no longer managed.
+          await chrome.storage.local.set({ subminerAnkiProxyUrl: null });
           return { updated: false, matched: false, reason: "blocked-existing-server", currentServer, targetServer };
         }
 
@@ -1509,11 +1510,16 @@ export async function syncYomitanDefaultAnkiServer(
         }
       }
 
+      if (changed) {
+        await invoke("setAllSettings", { value: optionsFull, source: "subminer" });
+      }
+      // Preserve the previous managed endpoint until settings are saved so failed switches can retry.
+      await chrome.storage.local.set({ subminerAnkiProxyUrl: forceOverride ? targetServer : null });
+
       if (!changed) {
         return { updated: false, matched: true, reason: "already-target", currentServer, targetServer, targetDeck };
       }
 
-      await invoke("setAllSettings", { value: optionsFull, source: "subminer" });
       return { updated: true, matched: true, currentServer, targetServer, targetDeck };
     })();
   `;
