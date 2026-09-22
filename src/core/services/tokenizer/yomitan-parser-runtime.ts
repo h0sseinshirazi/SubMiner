@@ -1,7 +1,18 @@
 import type { BrowserWindow, Extension, Session } from 'electron';
+import type { AnkiConnectConfig } from '../../../types';
+import { buildHachidoriAnkiHints } from './hachidori-anki-settings';
+import {
+  buildHachidoriSharingScript,
+  parseHachidoriHostStatus,
+  type HachidoriSharingRequest,
+} from '../../../shared/hachidori-sharing';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
+import {
+  HACHIDORI_PARSER_BRIDGE_SCRIPT,
+  HACHIDORI_SESSION_PARTITION,
+} from './hachidori-parser-bridge';
 import { selectYomitanParseTokens } from './parser-selection-stage';
 import {
   buildYomitanScanCallScript,
@@ -477,7 +488,7 @@ async function requestYomitanProfileMetadata(
     (async () => {
       const invoke = (action, params) =>
         new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({ action, params }, (response) => {
+          (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -596,6 +607,18 @@ function logYomitanProfileDiagnostics(
   logger.info?.('Yomitan active profile dictionaries loaded.', details);
 }
 
+function isHachidoriExtension(extension: Extension): boolean {
+  return extension.name === 'Hachidori';
+}
+
+// Without an explicit session, use the one the extension was loaded into:
+// Hachidori lives in its own partition, Yomitan in the default session.
+function resolveBackendSession(electron: typeof import('electron'), extension: Extension): Session {
+  return isHachidoriExtension(extension)
+    ? electron.session.fromPartition(HACHIDORI_SESSION_PARTITION)
+    : electron.session.defaultSession;
+}
+
 async function ensureYomitanParserWindow(
   deps: YomitanParserRuntimeDeps,
   logger: LoggerLike,
@@ -606,19 +629,20 @@ async function ensureYomitanParserWindow(
     return false;
   }
 
-  const currentWindow = deps.getYomitanParserWindow();
-  if (currentWindow && !currentWindow.isDestroyed()) {
-    return true;
-  }
-
   const existingInitPromise = deps.getYomitanParserInitPromise();
   if (existingInitPromise) {
     return existingInitPromise;
   }
 
+  const currentWindow = deps.getYomitanParserWindow();
+  if (currentWindow && !currentWindow.isDestroyed()) {
+    return true;
+  }
+
   const initPromise = (async () => {
-    const { BrowserWindow, session } = electron;
-    const yomitanSession = deps.getYomitanSession?.() ?? session.defaultSession;
+    const { BrowserWindow } = electron;
+    const yomitanSession =
+      deps.getYomitanSession?.() ?? resolveBackendSession(electron, yomitanExt);
     const parserWindow = new BrowserWindow({
       show: false,
       width: 800,
@@ -649,10 +673,14 @@ async function ensureYomitanParserWindow(
     });
 
     try {
-      await parserWindow.loadURL(`chrome-extension://${yomitanExt.id}/search.html`);
+      const parserPage = isHachidoriExtension(yomitanExt) ? 'settings.html' : 'search.html';
+      await parserWindow.loadURL(`chrome-extension://${yomitanExt.id}/${parserPage}`);
       const readyPromise = deps.getYomitanParserReadyPromise();
       if (readyPromise) {
         await readyPromise;
+      }
+      if (isHachidoriExtension(yomitanExt)) {
+        await parserWindow.webContents.executeJavaScript(HACHIDORI_PARSER_BRIDGE_SCRIPT, true);
       }
       // Eagerly install the scan runtime so the first subtitle line does not
       // pay the install round trip; failures fall back to the per-request
@@ -696,8 +724,8 @@ async function createYomitanExtensionWindow(
     return null;
   }
 
-  const { BrowserWindow, session } = electron;
-  const yomitanSession = deps.getYomitanSession?.() ?? session.defaultSession;
+  const { BrowserWindow } = electron;
+  const yomitanSession = deps.getYomitanSession?.() ?? resolveBackendSession(electron, yomitanExt);
   const window = new BrowserWindow({
     show: false,
     width: 1200,
@@ -740,6 +768,10 @@ async function invokeYomitanSettingsAutomation<T>(
   }
 
   try {
+    const extension = deps.getYomitanExt();
+    if (extension && isHachidoriExtension(extension)) {
+      await settingsWindow.webContents.executeJavaScript(HACHIDORI_PARSER_BRIDGE_SCRIPT, true);
+    }
     await settingsWindow.webContents.executeJavaScript(
       `
         (async () => {
@@ -892,7 +924,7 @@ export async function requestYomitanParseResults(
     (async () => {
       const invoke = (action, params) =>
         new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({ action, params }, (response) => {
+          (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -922,7 +954,7 @@ export async function requestYomitanParseResults(
     (async () => {
       const invoke = (action, params) =>
         new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({ action, params }, (response) => {
+          (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -1079,7 +1111,7 @@ async function fetchYomitanTermFrequencies(
       (async () => {
         const invoke = (action, params) =>
           new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage({ action, params }, (response) => {
+            (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
               if (chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
                 return;
@@ -1122,7 +1154,7 @@ async function fetchYomitanTermFrequencies(
     (async () => {
       const invoke = (action, params) =>
         new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({ action, params }, (response) => {
+          (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -1206,7 +1238,17 @@ function cacheFrequencyEntriesForPairs(
     const key = makeTermReadingCacheKey(pair.term, pair.reading);
     const exactEntries = groupedByPair.get(key);
     const termEntries = groupedByTerm.get(pair.term) ?? [];
-    frequencyCache.set(key, exactEntries ?? termEntries);
+    // Untagged frequency rows apply to every reading. A term-only query must
+    // retain all readings, rather than selecting only its untagged rows.
+    const untaggedEntries = groupedByPair.get(makeTermReadingCacheKey(pair.term, null)) ?? [];
+    frequencyCache.set(
+      key,
+      pair.reading === null
+        ? termEntries
+        : exactEntries
+          ? [...exactEntries, ...untaggedEntries]
+          : termEntries,
+    );
   }
 }
 
@@ -1340,6 +1382,7 @@ export async function syncYomitanDefaultAnkiServer(
   options?: {
     forceOverride?: boolean;
     deck?: string;
+    ankiConfig?: AnkiConnectConfig;
   },
 ): Promise<boolean> {
   const normalizedTargetServer = serverUrl.trim();
@@ -1359,7 +1402,7 @@ export async function syncYomitanDefaultAnkiServer(
     (async () => {
       const invoke = (action, params) =>
         new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({ action, params }, (response) => {
+          (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -1379,6 +1422,16 @@ export async function syncYomitanDefaultAnkiServer(
       const targetServer = ${JSON.stringify(normalizedTargetServer)};
       const targetDeck = ${JSON.stringify(normalizedTargetDeck)};
       const forceOverride = ${forceOverride ? 'true' : 'false'};
+      const hachidoriHints = ${JSON.stringify(options?.ankiConfig ? buildHachidoriAnkiHints(options.ankiConfig) : null)};
+      if (hachidoriHints && typeof globalThis.__subminerSyncAnkiSettings === 'function') {
+        return globalThis.__subminerSyncAnkiSettings({
+          server: targetServer, deck: targetDeck, forceOverride, hints: hachidoriHints,
+        });
+      }
+      let previousManagedProxy = null;
+      if (typeof globalThis.__subminerSetAnkiProxyUrl === 'function') {
+        previousManagedProxy = await globalThis.__subminerSetAnkiProxyUrl(forceOverride ? targetServer : null);
+      }
       const optionsFull = await invoke("optionsGetFull", undefined);
       const profiles = Array.isArray(optionsFull.profiles) ? optionsFull.profiles : [];
       if (profiles.length === 0) {
@@ -1405,7 +1458,8 @@ export async function syncYomitanDefaultAnkiServer(
       let changed = false;
       if (currentServer !== targetServer) {
         const canReplaceCurrent =
-          forceOverride || currentServer.length === 0 || currentServer === "http://127.0.0.1:8765";
+          forceOverride || currentServer.length === 0 || currentServer === "http://127.0.0.1:8765" ||
+          (typeof previousManagedProxy === 'string' && currentServer === previousManagedProxy);
         if (!canReplaceCurrent) {
           return { updated: false, matched: false, reason: "blocked-existing-server", currentServer, targetServer };
         }
@@ -1455,6 +1509,12 @@ export async function syncYomitanDefaultAnkiServer(
 
   try {
     const result = await parserWindow.webContents.executeJavaScript(script, true);
+    if (isObject(result) && result.pending === true) {
+      logger.info?.(
+        'Anki is unavailable; Hachidori field auto-population will retry when opened again',
+      );
+      return false;
+    }
     const updated =
       typeof result === 'object' &&
       result !== null &&
@@ -1564,7 +1624,7 @@ function buildYomitanInvokeScript(actionLiteral: string, paramsLiteral: string):
     (async () => {
       const invoke = (action, params) =>
         new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({ action, params }, (response) => {
+          (globalThis.__subminerDictionarySendMessage ?? chrome.runtime.sendMessage.bind(chrome.runtime))({ action, params }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -1584,6 +1644,25 @@ function buildYomitanInvokeScript(actionLiteral: string, paramsLiteral: string):
       return await invoke(${actionLiteral}, ${paramsLiteral});
     })();
   `;
+}
+
+export async function requestHachidoriSharing(
+  request: HachidoriSharingRequest,
+  deps: YomitanParserRuntimeDeps,
+  logger: LoggerLike,
+) {
+  const extension = deps.getYomitanExt();
+  if (!extension || !isHachidoriExtension(extension)) throw new Error('Hachidori is not active.');
+  const ready = await ensureYomitanParserWindow(deps, logger);
+  const window = deps.getYomitanParserWindow();
+  if (!ready || !window || window.isDestroyed()) throw new Error('Hachidori is unavailable.');
+  const reply: unknown = await window.webContents.executeJavaScript(
+    buildHachidoriSharingScript(request),
+    true,
+  );
+  const status = parseHachidoriHostStatus(reply);
+  if (request.type !== 'hd_sharing_status') clearYomitanParserCachesForWindow(window);
+  return status;
 }
 
 async function invokeYomitanBackendAction<T>(

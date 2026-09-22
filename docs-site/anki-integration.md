@@ -21,6 +21,14 @@ AnkiConnect listens on `http://127.0.0.1:8765` by default. If you changed the po
 
 AnkiConnect and Kiku/Senren settings follow the [configuration validation rules](/configuration#configuration-file): invalid values produce a warning and fall back to the option's default. Use JSON booleans such as `true`, not strings such as `"true"`, and a positive number for `ankiConnect.pollingRate`.
 
+### Reusing SubMiner settings in Hachidori
+
+When Hachidori is the selected backend, SubMiner uses its Anki settings to populate Hachidori's first Anki template on startup and when opening its settings. It copies the configured deck and tags into untouched defaults, then fills missing word, sentence, pronunciation-audio, and picture mappings with fields that exist in Anki. Pronunciation uses `ankiConnect.fields.wordAudio`, falling back to `fields.audio` when no word-audio field is set.
+
+If the note type is unset, SubMiner looks for a unique match containing its configured word and sentence fields. Enabled Lapis, Kiku, or Senren integration narrows the search; Lapis uses its configured model name. A fresh mapping also receives Hachidori's matching preset for readings, definitions, and other recognized fields. If several note types match, choose one in Hachidori Settings. If Anki is closed, open Hachidori Settings again after starting Anki to retry.
+
+Existing custom decks, tags, field mappings, advanced templates, and additional templates stay intact. This fills missing settings rather than continually overwriting Hachidori choices. The Anki endpoint continues to follow SubMiner's proxy configuration. Sentence audio, image timing, translation, metadata, and duplicate field grouping remain controlled by SubMiner; pronunciation sources are configured in Hachidori. Linking an external dictionary host does not change this behavior.
+
 ## Auto-enrichment transport
 
 When you add a word via Yomitan, SubMiner detects the new card and fills in the sentence, audio, and image fields automatically. Two detection methods are available:
@@ -140,6 +148,8 @@ SubMiner maps its data to your Anki note fields. Configure these under `ankiConn
 Field names are matched against your Anki note type case-insensitively (an exact match wins, then a lowercase comparison). If a configured field does not exist on the note type, SubMiner skips it without error.
 
 `fields.wordAudio` selects the existing dictionary-audio field used to calculate the animated image's opening freeze. This mapping only reads audio; `fields.audio` still controls where generated sentence audio is written. See [config.example.jsonc](/config.example.jsonc) for defaults.
+
+When Hachidori mines through SubMiner's Anki proxy, it prepares downloadable word audio before saving the note so the animation delay can be measured on the first mine. Configure a downloadable pronunciation source in Hachidori's Audio settings; browser speech cannot be saved into Anki by the SubMiner overlay. If pronunciation is unavailable, Hachidori reports a warning and the card has no word-audio hold.
 
 These mappings always control normal word-card enrichment, including Yomitan proxy/polling updates and manual clipboard updates. Enabling Lapis or Kiku does not replace the configured word-card sentence and audio fields with `Sentence` and `SentenceAudio`. The dedicated sentence-card and audio-card shortcuts still use those Lapis/Kiku field names.
 
@@ -314,6 +324,8 @@ Word cards get a card-type flag when SubMiner fills their sentence, whether that
 ## Field grouping (Kiku/Senren)
 
 When you mine the same word multiple times, SubMiner can merge the cards instead of creating duplicates. This is designed for note types that support grouped fields: [Kiku](https://github.com/youyoumu/kiku) and [Senren](https://github.com/BrenoAqua/Senren) (which calls the feature scene switching).
+
+Field grouping runs when a new note is added with known duplicates. With the Hachidori backend that is the popup's **Add anyway** choice; **Overwrite** updates the existing note in place and only receives media enrichment.
 
 ```jsonc
 "ankiConnect": {

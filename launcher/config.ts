@@ -1,4 +1,5 @@
 import { fail } from './log.js';
+import type { DictionaryBackend } from '../src/types/config.js';
 import type {
   Args,
   LauncherLoggingConfig,
@@ -100,8 +101,17 @@ export function loadLauncherLoggingConfig(): LauncherLoggingConfig {
   };
 }
 
+export function loadLauncherDictionaryBackend(): DictionaryBackend {
+  return readLauncherMainConfigObject()?.dictionaryBackend === 'hachidori'
+    ? 'hachidori'
+    : 'yomitan';
+}
+
 export function hasLauncherExternalYomitanProfileConfig(): boolean {
-  return readExternalYomitanProfilePath(readLauncherMainConfigObject()) !== null;
+  const config = readLauncherMainConfigObject();
+  return (
+    config?.dictionaryBackend !== 'hachidori' && readExternalYomitanProfilePath(config) !== null
+  );
 }
 
 export function readPluginRuntimeConfig(logLevel: LogLevel): PluginRuntimeConfig {

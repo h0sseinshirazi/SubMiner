@@ -15,7 +15,7 @@ All shortcuts are configurable in `config.jsonc` under `shortcuts` and `keybindi
 | Shortcut      | Action                 | Scope                                       | Configurable                           |
 | ------------- | ---------------------- | -------------------------------------------- | -------------------------------------- |
 | `Alt+Shift+O` | Toggle visible overlay | Works while the overlay or mpv has focus     | `shortcuts.toggleVisibleOverlayGlobal` |
-| `Alt+Shift+Y` | Open Yomitan settings  | OS-global (registered with the OS)           | Fixed (not configurable)               |
+| `Alt+Shift+Y` | Open active dictionary settings | OS-global (registered with the OS)           | Fixed (not configurable)               |
 
 ::: tip
 `Alt+Shift+O` is dispatched by the overlay window and the mpv plugin, so it works from either surface without OS registration. Only `Alt+Shift+Y` is registered with the OS; if it conflicts with another application, that binding cannot be changed. All `shortcuts.*` keys hot-reload - no restart needed.
@@ -124,7 +124,7 @@ When the mpv plugin is installed, all commands use a `y` chord prefix - press `y
 | `y-S` | Stop overlay                                               |
 | `y-t` | Toggle visible overlay                                     |
 | `v`   | Cycle primary subtitle bar mode (hidden → visible → hover) |
-| `y-o` | Open Yomitan settings                                      |
+| `y-o` | Open active dictionary settings                           |
 | `y-r` | Restart overlay                                            |
 | `y-c` | Check overlay status                                       |
 | `y-h` | Open session help                                          |

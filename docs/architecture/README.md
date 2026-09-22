@@ -44,6 +44,12 @@ Update checks and startup launcher migration share a serialized update-state sto
 
 ## Architecture Intent
 
+The dictionary backend is selected once at startup by `dictionaryBackend`. Yomitan keeps its existing session and external-profile policy. Hachidori uses `persist:hachidori`; overlay windows select that session before extension loading, including deferred startup. Named settings flags can open either backend without injecting a second reader into the active overlay. The detached stats word helper reads the same config key so dashboard mining uses the active backend.
+
+`setup-state.json` records one backend's status at a time plus `completedDictionaryBackends`, the backends that finished setup before. The app projects the file onto its active backend on startup and stamps that backend into the file. The launcher gates playback on the stamped backend when an app is already running, since a config edit takes effect only after restart.
+
+Hachidori's source, HoshiDicts engine, licenses, pinned revision, and local patch notes live in `vendor/hachidori/`. `build:hachidori` verifies recorded artifact checksums and stages the extension for development and packaging. Before loading the extension, its session clears service worker registrations so Electron uses the current bundled code; dictionary databases and settings remain intact. First-run setup uses Hachidori sharing messages to link or unlink external dictionary hosts and checks their live inventory. Linked dictionaries and dictionary edits use the host, while Anki configuration, pronunciation sources, custom buttons, and mining stay local to SubMiner. The parser bridge adapts its native runtime messages to the existing subtitle scanner and dictionary automation. Its local content bridge implements SubMiner's existing popup events and commands. The Anki proxy strips local duplicate/overwrite metadata before forwarding requests and enriches only confirmed writes.
+
 - Small units, explicit boundaries
 - Composition over monoliths
 - Pure helpers where possible

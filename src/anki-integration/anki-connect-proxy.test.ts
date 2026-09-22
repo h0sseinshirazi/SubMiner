@@ -441,6 +441,70 @@ test('proxy strips SubMiner duplicate metadata before forwarding upstream addNot
   }
 });
 
+test('proxy enriches confirmed Hachidori overwrites without counting a new card or forwarding metadata', async () => {
+  const received: unknown[] = [];
+  let upstreamError: string | null = null;
+  const upstream = http.createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    received.push(JSON.parse(Buffer.concat(chunks).toString()));
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ result: null, error: upstreamError }));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address();
+  assert.ok(address && typeof address === 'object');
+  const processed: number[] = [];
+  const added: number[] = [];
+  const proxy = new AnkiConnectProxyServer({
+    shouldAutoUpdateNewCards: () => true,
+    processNewCard: async (id) => {
+      processed.push(id);
+    },
+    recordCardsAdded: (count) => {
+      added.push(count);
+    },
+    logInfo: () => {},
+    logWarn: () => {},
+    logError: () => {},
+  });
+  try {
+    proxy.start({ host: '127.0.0.1', port: 0, upstreamUrl: `http://127.0.0.1:${address.port}` });
+    await proxy.waitUntilReady();
+    const server: unknown = Reflect.get(proxy, 'server');
+    assert.ok(server instanceof http.Server);
+    const bound = server.address();
+    assert.ok(bound && typeof bound === 'object');
+    for (const [id, marked, error] of [
+      [51, true, null],
+      [52, false, null],
+      [53, true, 'failed'],
+    ] satisfies Array<[number, boolean, string | null]>) {
+      upstreamError = error;
+      await fetch(`http://127.0.0.1:${bound.port}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateNoteFields',
+          version: 6,
+          params: {
+            note: { id, fields: { Expression: '猫' } },
+            ...(marked ? { subminerEnrich: true } : {}),
+          },
+        }),
+      });
+    }
+    await waitForCondition(() => processed.length > 0);
+    assert.deepEqual(processed, [51]);
+    assert.deepEqual(added, []);
+    assert.equal(JSON.stringify(received).includes('subminerEnrich'), false);
+  } finally {
+    proxy.stop();
+    upstream.close();
+    await once(upstream, 'close');
+  }
+});
+
 test('proxy returns addNote response without waiting for background enrichment', async () => {
   const processed: number[] = [];
   let releaseProcessing: (() => void) | undefined;

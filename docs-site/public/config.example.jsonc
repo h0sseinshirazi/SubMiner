@@ -7,6 +7,13 @@
 {
 
   // ==========================================
+  // Dictionary Backend
+  // Select the dictionary lookup backend: yomitan or hachidori.
+  // Restart SubMiner after changing the backend. Each backend keeps separate settings and dictionaries.
+  // ==========================================
+  "dictionaryBackend": "yomitan", // Dictionary lookup backend. Restart SubMiner after changing this setting. Values: yomitan | hachidori
+
+  // ==========================================
   // Japanese Subtitle Generation
   // Generate timed Japanese subtitles from local audio using whisper.cpp.
   // Configure an existing GGML model path or explicitly download a SubMiner-managed model.

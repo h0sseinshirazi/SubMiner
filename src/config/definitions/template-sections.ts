@@ -2,6 +2,14 @@ import { ConfigTemplateSection } from './shared';
 
 const CORE_TEMPLATE_SECTIONS: ConfigTemplateSection[] = [
   {
+    title: 'Dictionary Backend',
+    description: ['Select the dictionary lookup backend: yomitan or hachidori.'],
+    notes: [
+      'Restart SubMiner after changing the backend. Each backend keeps separate settings and dictionaries.',
+    ],
+    key: 'dictionaryBackend',
+  },
+  {
     title: 'Japanese Subtitle Generation',
     description: [
       'Generate timed Japanese subtitles from local audio using whisper.cpp.',

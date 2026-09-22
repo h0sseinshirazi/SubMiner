@@ -171,6 +171,12 @@ The configuration file includes several main sections:
 
 ## Core settings
 
+### Dictionary backend
+
+`dictionaryBackend` accepts `"yomitan"` or `"hachidori"`. The default is defined in the [generated configuration example](/config.example.jsonc). Restart SubMiner after changing it. The tray shows the selected backend's settings, and the global dictionary-settings shortcut follows the same selection.
+
+Each backend stores its own dictionaries and mining settings. `yomitan.externalProfilePath` applies only to Yomitan. See [Hachidori setup](./usage.md#hachidori-setup) before switching an existing installation.
+
 ### Logging
 
 Control the minimum log level for runtime output:

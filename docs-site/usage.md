@@ -15,8 +15,8 @@ That is the whole setup. The `subminer` launcher starts mpv, opens the IPC socke
 Every current launcher wrapper uses the Bun runtime included with the SubMiner app. This includes setup installs, release downloads, `make install`, and the AUR package. You only need the wrapper directory on your terminal `PATH`. Building SubMiner from source still requires Bun on the development machine.
 
 > [!IMPORTANT]
-> SubMiner requires the bundled Yomitan instance to have at least one dictionary imported for lookups to work.
-> See [Yomitan setup](#yomitan-setup) for details.
+> SubMiner requires at least one dictionary in the selected lookup backend.
+> See [Yomitan setup](#yomitan-setup) or [Hachidori setup](#hachidori-setup).
 
 ::: tip Anki card enrichment
 If you want sentence, audio, and screenshot fields on your Anki cards, add this to your config:
@@ -174,6 +174,7 @@ SubMiner.AppImage --toggle-primary-subtitle-bar  # Toggle the primary subtitle b
 SubMiner.AppImage --toggle-subtitle-sidebar      # Toggle the subtitle sidebar
 SubMiner.AppImage --open-tsukihime        # Open TsukiHime subtitle search
 SubMiner.AppImage --yomitan               # Open Yomitan settings
+SubMiner.AppImage --hachidori             # Open Hachidori settings
 SubMiner.AppImage --settings              # Open the SubMiner settings window
 SubMiner.AppImage --jellyfin              # Open the Jellyfin setup window
 SubMiner.AppImage --dictionary            # Generate a character dictionary ZIP
@@ -208,7 +209,7 @@ The tray menu also includes `View Changelog`, which opens the in-app changelog m
 
 ### Windows mpv shortcut
 
-First-run setup creates the config file, then requires Yomitan dictionaries before it can finish.
+First-run setup creates the config file, then requires dictionaries in the selected backend before it can finish.
 
 If you enabled the optional Windows shortcut during install, SubMiner creates a `SubMiner mpv` shortcut in the Start menu and/or on the desktop. On Windows, that shortcut is the recommended way to launch local files with SubMiner because it starts `mpv.exe` with the right defaults directly.
 After setup completes, the shortcut is the normal Windows playback entry point.
@@ -314,6 +315,26 @@ For SubMiner overlay lookups to work, open Yomitan settings (`subminer app --yom
 
 If you also use Yomitan in a browser, set that profile up separately. It inherits nothing from the bundled instance.
 
+### Hachidori setup
+
+Set `dictionaryBackend` to `"hachidori"` in SubMiner settings or `config.jsonc`, then restart SubMiner. The tray's dictionary settings entry changes to **Open Hachidori Settings**. Switching to `"yomitan"` restores the Yomitan entry after restarting.
+
+Open Hachidori settings with `subminer app --hachidori` or `SubMiner.AppImage --hachidori`. Import your dictionary ZIPs or use Hachidori's recommended dictionary installer, then configure its Anki templates. Yomitan and Hachidori keep separate dictionaries and settings. Yomitan profiles, custom Handlebars templates, and `yomitan.externalProfilePath` do not transfer to Hachidori.
+
+First-run setup also offers **Dictionary source → Use an external dictionary host → Link host**. Enable sharing in the other Hachidori app or browser, or start a compatible Docker dictionary host, then enter its sharing address, such as `127.0.0.1:8771` or `ws://host:8771/link`. Use the WebSocket sharing port, not the management page or HTTP API port. The external host section is collapsed until you expand it or a host is linked. Browser hosts need the browser, Hachidori extension, and relay running. Electron hosts need the host app and any required relay running. Docker hosts need the container running; no browser needs to stay open.
+
+Setup checks the host connection and dictionary inventory before enabling Finish. Import at least one dictionary on the host and refresh status. The link persists across restarts. **Unlink and use local dictionaries** restores SubMiner's local library. Anki templates, pronunciation sources, custom buttons, and SubMiner's audio/image processing remain local while linked. Dictionary settings and dictionary edits use the host. Older hosts without the standalone frequency query support frequency annotations through term lookups; frequency-only entries without a matching term require an updated host.
+
+Both named settings flags work independently of the selected backend. Opening settings does not switch the overlay backend. The global dictionary-settings shortcut opens the selected backend.
+
+Hachidori uses SubMiner's subtitle scanning, lookup counter, popup pause behavior, controller commands, character dictionaries, and Anki media enrichment. Keep SubMiner's AnkiConnect proxy enabled for screenshots and sentence audio. SubMiner routes Hachidori to that proxy when it is active; Hachidori's own screen recorder and screenshot capture are disabled in the embedded app.
+
+Existing controls such as `startupWarmups.yomitanExtension` and `subtitleStyle.autoPauseVideoOnYomitanPopup` apply to the selected backend. Hachidori has one dictionary configuration, so character-dictionary profile scope applies to that configuration.
+
+First-run setup remembers each backend that finished it. Switching to a backend for the first time asks for that backend's dictionaries; switching back to one that already finished does not repeat setup. Until SubMiner restarts, it keeps running the backend it started with, and the launcher gates playback on that running backend and logs a restart reminder.
+
+Hachidori's own duplicate handling differs from Yomitan's. Choosing **Overwrite** in the Hachidori popup updates the existing note and SubMiner enriches its media, while **Add anyway** creates a new note and runs SubMiner's Kiku/Senren [field grouping](./anki-integration.md#field-grouping-kiku-senren). Mining from the stats dashboard uses the selected backend as well.
+
 ### YouTube playback
 
 `subminer` accepts direct URLs (for example, YouTube links) and `ytsearch:` targets.
@@ -408,7 +429,7 @@ See [Keyboard Shortcuts](/shortcuts) for the full reference, including mining sh
 | Keybind       | Action                 | Scope                                                                                              |
 | ------------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
 | `Alt+Shift+O` | Toggle visible overlay | Works while the overlay or mpv has focus (configurable via `shortcuts.toggleVisibleOverlayGlobal`) |
-| `Alt+Shift+Y` | Open Yomitan settings  | OS-global - registered with the system, works from any window                                      |
+| `Alt+Shift+Y` | Open active dictionary settings | OS-global - registered with the system, works from any window                                      |
 
 `Alt+Shift+Y` is fixed and not configurable. All other shortcuts can be changed under `shortcuts` in your config.
 

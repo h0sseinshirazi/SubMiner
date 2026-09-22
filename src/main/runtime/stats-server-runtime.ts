@@ -172,6 +172,7 @@ export function createStatsServerRuntime(deps: StatsServerRuntimeDeps): {
         await syncYomitanDefaultAnkiServerCore(ankiUrl, yomitanDeps, yomitanLogger, {
           forceOverride: shouldForceOverrideYomitanAnkiServer(ankiConnectConfig),
           deck: ankiConnectConfig.deck,
+          ankiConfig: ankiConnectConfig,
         });
         const result = await addYomitanNoteViaSearch(word, yomitanDeps, yomitanLogger);
         if (result.noteId && result.duplicateNoteIds.length > 0) {

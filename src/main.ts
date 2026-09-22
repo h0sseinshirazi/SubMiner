@@ -1,3 +1,4 @@
+import { requestHachidoriSharing } from './core/services/tokenizer/yomitan-parser-runtime';
 /*
   SubMiner - All-in-one sentence mining overlay
   Copyright (C) 2026 sudacode
@@ -32,6 +33,14 @@ import {
   screen,
 } from 'electron';
 import { applyControllerConfigUpdate } from './main/controller-config-update.js';
+import {
+  createHachidoriExtensionRuntime,
+  getHachidoriSession,
+} from './core/services/hachidori-extension';
+import {
+  DICTIONARY_EXTERNAL_LINK_CHANNEL,
+  parseDictionaryExternalUrl,
+} from './shared/dictionary-external-link';
 import { openPlaylistBrowser as openPlaylistBrowserRuntime } from './main/runtime/playlist-browser-open';
 import { readMpvInputBindings } from './main/runtime/mpv-input-bindings';
 import { createAniSkipRuntime } from './main/runtime/aniskip-runtime';
@@ -906,14 +915,34 @@ const {
   appState,
   appLifecycleApp,
 } = bootServices;
+// Backend changes take effect on restart; windows and parser must share one session.
+const activeDictionaryBackend = configService.getConfig().dictionaryBackend;
+const hachidoriExtensionRuntime = createHachidoriExtensionRuntime(USER_DATA_PATH);
+let hachidoriSettingsWindow: BrowserWindow | null = null;
+let inactiveYomitanExtension: Extension | null = null;
+let inactiveYomitanSettingsWindow: BrowserWindow | null = null;
+let inactiveYomitanLoad: Promise<Extension | null> | null = null;
 let pendingSubtitleMiningContext: SubtitleMiningContext | null = null;
 const configSettingsFields = buildConfigSettingsRegistry(DEFAULT_CONFIG);
+
+ipcMain.handle(DICTIONARY_EXTERNAL_LINK_CHANNEL, async (event, value: unknown) => {
+  if (
+    activeDictionaryBackend !== 'hachidori' ||
+    event.senderFrame !== event.sender.mainFrame ||
+    !overlayManager.getOverlayWindows().some((window) => window.webContents === event.sender)
+  ) {
+    throw new Error('Dictionary links are only available from the active overlay');
+  }
+  await shell.openExternal(parseDictionaryExternalUrl(value));
+});
 
 function getOverlayForegroundSeparateWindows(): BrowserWindow[] {
   return [
     appState.configSettingsWindow,
     appState.syncUiWindow,
     appState.yomitanSettingsWindow,
+    hachidoriSettingsWindow,
+    inactiveYomitanSettingsWindow,
     appState.anilistSetupWindow,
     appState.jellyfinSetupWindow,
     appState.firstRunSetupWindow,
@@ -1011,6 +1040,8 @@ const {
 } = statsServerRuntime;
 
 function requestAppQuit(): void {
+  destroyYomitanSettingsWindow(hachidoriSettingsWindow);
+  destroyYomitanSettingsWindow(inactiveYomitanSettingsWindow);
   destroyYomitanSettingsWindow(appState.yomitanSettingsWindow);
   appState.yomitanSettingsWindow = null;
   destroyStatsWindow();
@@ -1455,6 +1486,15 @@ const createCommandLineLauncherRuntimeOptions = () => ({
     : undefined,
 });
 const firstRunSetupService = createFirstRunSetupService({
+  getDictionaryBackend: () => activeDictionaryBackend,
+  getHachidoriHostStatus: async () => {
+    await ensureYomitanExtensionLoaded();
+    return requestHachidoriSharing(
+      { type: 'hd_sharing_status' },
+      getYomitanParserRuntimeDeps(),
+      logger,
+    );
+  },
   platform: process.platform,
   configDir: CONFIG_DIR,
   getYomitanDictionaryCount: async () => {
@@ -2276,6 +2316,11 @@ const buildConfigHotReloadAppliedMainDepsHandler = createBuildConfigHotReloadApp
     applyAnkiRuntimeConfigPatch: (patch) => {
       if (appState.ankiIntegration) {
         appState.ankiIntegration.applyRuntimeConfigPatch(patch);
+      }
+      if (activeDictionaryBackend === 'hachidori' && appState.yomitanExt) {
+        void syncYomitanDefaultProfileAnkiServer().catch((error: unknown) =>
+          logger.error('Failed to auto-populate Hachidori Anki settings', error),
+        );
       }
     },
     invalidateTokenizationCache: () => {
@@ -3450,6 +3495,8 @@ const openFirstRunSetupWindowHandler = createOpenFirstRunSetupWindowHandler({
     return {
       configReady: snapshot.configReady,
       dictionaryCount: snapshot.dictionaryCount,
+      dictionaryBackend: snapshot.dictionaryBackend,
+      hachidoriHost: snapshot.hachidoriHost,
       canFinish: snapshot.canFinish,
       externalYomitanConfigured: snapshot.externalYomitanConfigured,
       pluginStatus: snapshot.pluginStatus,
@@ -3465,6 +3512,33 @@ const openFirstRunSetupWindowHandler = createOpenFirstRunSetupWindowHandler({
   buildSetupHtml: (model) => buildFirstRunSetupHtml(model),
   parseSubmissionUrl: (rawUrl) => parseFirstRunSetupSubmissionUrl(rawUrl),
   handleAction: async (submission: FirstRunSetupSubmission) => {
+    if (
+      submission.action === 'link-hachidori-host' ||
+      submission.action === 'unlink-hachidori-host'
+    ) {
+      try {
+        if (activeDictionaryBackend !== 'hachidori')
+          throw new Error('Select Hachidori and restart SubMiner before linking a host.');
+        await ensureYomitanExtensionLoaded();
+        const status = await requestHachidoriSharing(
+          submission.action === 'link-hachidori-host'
+            ? { type: 'hd_sharing_client_link', address: submission.address }
+            : { type: 'hd_sharing_client_unlink' },
+          getYomitanParserRuntimeDeps(),
+          logger,
+        );
+        firstRunSetupMessage =
+          status.kind === 'local'
+            ? 'Using dictionaries installed in SubMiner.'
+            : status.kind === 'connected'
+              ? `Linked to ${status.name}. Anki mining stays in SubMiner.`
+              : status.message;
+      } catch (error) {
+        firstRunSetupMessage =
+          error instanceof Error ? error.message : 'Could not update the dictionary host.';
+      }
+      return;
+    }
     if (submission.action === 'remove-legacy-plugin') {
       const snapshot = await firstRunSetupService.removeLegacyMpvPlugin();
       firstRunSetupMessage = snapshot.message;
@@ -3505,8 +3579,8 @@ const openFirstRunSetupWindowHandler = createOpenFirstRunSetupWindowHandler({
       return;
     }
     if (submission.action === 'open-yomitan-settings') {
-      firstRunSetupMessage = openYomitanSettings()
-        ? 'Opened Yomitan settings. Install dictionaries, then refresh status.'
+      firstRunSetupMessage = openDictionarySettings()
+        ? `Opened ${activeDictionaryBackend === 'hachidori' ? 'Hachidori' : 'Yomitan'} settings. Install dictionaries, then refresh status.`
         : 'Yomitan settings are unavailable while external read-only profile mode is enabled.';
       return;
     }
@@ -5157,6 +5231,41 @@ function initializeOverlayRuntime(): void {
 }
 
 function openYomitanSettings(): boolean {
+  if (activeDictionaryBackend === 'hachidori') {
+    if (configService.getConfig().yomitan.externalProfilePath.trim()) {
+      logger.warn('Yomitan settings unavailable while using read-only external-profile mode.');
+      return false;
+    }
+    inactiveYomitanLoad ??= inactiveYomitanExtension
+      ? Promise.resolve(inactiveYomitanExtension)
+      : loadYomitanExtensionCore({
+          userDataPath: USER_DATA_PATH,
+          getYomitanParserWindow: () => null,
+          setYomitanParserWindow: () => {},
+          setYomitanParserReadyPromise: () => {},
+          setYomitanParserInitPromise: () => {},
+          setYomitanExtension: (extension) => {
+            inactiveYomitanExtension = extension;
+          },
+          setYomitanSession: () => {},
+        }).finally(() => {
+          inactiveYomitanLoad = null;
+        });
+    void (
+      inactiveYomitanExtension ? Promise.resolve(inactiveYomitanExtension) : inactiveYomitanLoad
+    )
+      .then((extension) =>
+        openYomitanSettingsWindow({
+          yomitanExt: extension,
+          getExistingWindow: () => inactiveYomitanSettingsWindow,
+          setWindow: (window) => {
+            inactiveYomitanSettingsWindow = window;
+          },
+        }),
+      )
+      .catch((error: unknown) => logger.error('Failed to open Yomitan settings', error));
+    return true;
+  }
   if (yomitanProfilePolicy.isExternalReadOnlyMode()) {
     const message = 'Yomitan settings unavailable while using read-only external-profile mode.';
     logger.warn(
@@ -5167,6 +5276,39 @@ function openYomitanSettings(): boolean {
   }
   openYomitanSettingsHandler();
   return true;
+}
+
+function openHachidoriSettings(): void {
+  void (
+    activeDictionaryBackend === 'hachidori'
+      ? ensureYomitanExtensionLoaded()
+      : hachidoriExtensionRuntime.ensureLoaded()
+  )
+    .then((extension) =>
+      openYomitanSettingsWindow({
+        backend: 'hachidori',
+        yomitanExt: extension,
+        yomitanSession: getHachidoriSession(),
+        getExistingWindow: () => hachidoriSettingsWindow,
+        setWindow: (window) => {
+          hachidoriSettingsWindow = window;
+        },
+        onWindowClosed: () => {
+          if (activeDictionaryBackend === 'hachidori' && appState.yomitanParserWindow) {
+            clearYomitanParserCachesForWindow(appState.yomitanParserWindow);
+          }
+        },
+      }),
+    )
+    .catch((error: unknown) => logger.error('Failed to open Hachidori settings', error));
+}
+
+function openDictionarySettings(): boolean {
+  if (activeDictionaryBackend === 'hachidori') {
+    openHachidoriSettings();
+    return true;
+  }
+  return openYomitanSettings();
 }
 
 const { exportLogsFromTray } = createLogExportTrayRuntime({
@@ -5196,7 +5338,7 @@ const {
       getConfiguredShortcuts: () => getConfiguredShortcutsHandler(),
       registerGlobalShortcutsCore,
       toggleVisibleOverlay: () => toggleVisibleOverlay(),
-      openYomitanSettings: () => openYomitanSettings(),
+      openYomitanSettings: () => openDictionarySettings(),
       isDev,
       getMainWindow: () => overlayManager.getMainWindow(),
     }),
@@ -5687,7 +5829,7 @@ const { registerIpcRuntimeHandlers } = composeIpcRuntimeHandlers({
         }
       },
       onYoutubePickerResolve: (request) => youtubeFlowRuntime.resolveActivePicker(request),
-      openYomitanSettings: () => openYomitanSettings(),
+      openYomitanSettings: () => openDictionarySettings(),
       // Overlay lookups carry no cue context of their own; fall back to snapshotting the
       // live mpv sub timings at lookup time so media generation clips the mined line even
       // when extraction finishes long after playback has moved on.
@@ -6128,6 +6270,7 @@ const { handleCliCommand, handleInitialArgs } = composeCliStartupHandlers({
     },
     runYoutubePlaybackFlow: (request) => youtubePlaybackRuntime.runYoutubePlaybackFlow(request),
     ensureBackgroundStatsServer: () => ensureBackgroundStatsServer(),
+    openHachidoriSettings: () => openHachidoriSettings(),
     openYomitanSettings: () => openYomitanSettings(),
     openConfigSettingsWindow: () => configSettingsRuntime.openWindow(),
     openSyncUiWindow: () => openSyncUiWindowHandler(),
@@ -6303,7 +6446,8 @@ const { createMainWindow: createMainWindowHandler, createModalWindow: createModa
         overlayVisibilityComposer.setOverlayDebugVisualizationEnabled(enabled),
       isOverlayVisible: (windowKind) =>
         windowKind === 'visible' ? overlayManager.getVisibleOverlayVisible() : false,
-      getYomitanSession: () => appState.yomitanSession,
+      getYomitanSession: () =>
+        activeDictionaryBackend === 'hachidori' ? getHachidoriSession() : appState.yomitanSession,
       tryHandleOverlayShortcutLocalFallback: (input) =>
         overlayShortcutsRuntime.tryHandleOverlayShortcutLocalFallback(input),
       forwardTabToMpv: () => sendMpvCommandRuntime(appState.mpvClient, ['keypress', 'TAB']),
@@ -6391,6 +6535,8 @@ const { ensureTray: ensureTrayHandler, destroyTray: destroyTrayHandler } =
       showFirstRunSetup: () => !firstRunSetupService.isSetupCompleted(),
       openFirstRunSetupWindow: (force?: boolean) => openFirstRunSetupWindow(force),
       showWindowsMpvLauncherSetup: () => process.platform === 'win32',
+      getDictionaryBackend: () => activeDictionaryBackend,
+      openHachidoriSettings: () => openHachidoriSettings(),
       openYomitanSettings: () => openYomitanSettings(),
       openConfigSettingsWindow: () => configSettingsRuntime.openWindow(),
       openSyncUiWindow: () => openSyncUiWindowHandler(),
@@ -6435,12 +6581,21 @@ const { ensureTray: ensureTrayHandler, destroyTray: destroyTrayHandler } =
     buildMenuFromTemplate: (template) => Menu.buildFromTemplate(template),
   });
 const yomitanProfilePolicy = createYomitanProfilePolicy({
-  externalProfilePath: configService.getConfig().yomitan.externalProfilePath,
+  externalProfilePath:
+    activeDictionaryBackend === 'yomitan'
+      ? configService.getConfig().yomitan.externalProfilePath
+      : '',
   logInfo: (message) => logger.info(message),
 });
 const configuredExternalYomitanProfilePath = yomitanProfilePolicy.externalProfilePath;
 const yomitanExtensionRuntime = createYomitanExtensionRuntime({
-  loadYomitanExtensionCore,
+  loadYomitanExtensionCore: async (deps) => {
+    if (activeDictionaryBackend === 'yomitan') return loadYomitanExtensionCore(deps);
+    const extension = await hachidoriExtensionRuntime.ensureLoaded();
+    deps.setYomitanExtension(extension);
+    deps.setYomitanSession(getHachidoriSession());
+    return extension;
+  },
   userDataPath: USER_DATA_PATH,
   externalProfilePath: configuredExternalYomitanProfilePath,
   getYomitanParserWindow: () => appState.yomitanParserWindow,

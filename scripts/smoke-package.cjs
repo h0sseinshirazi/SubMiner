@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
+const http = require('node:http');
 
 const resources = path.resolve(process.argv[2]);
 const archive = path.join(resources, 'app.asar');
@@ -49,12 +50,16 @@ async function smoke() {
     { allowFileAccess: true },
   );
   assert(extension.id, 'Yomitan extension failed to load');
+  const hachidori = await session
+    .fromPartition('persist:hachidori')
+    .extensions.loadExtension(path.join(resources, 'hachidori'), { allowFileAccess: true });
+  assert(hachidori.id, 'Hachidori extension failed to load');
   const failedRequests = [];
   session.defaultSession.webRequest.onErrorOccurred({ urls: ['file://*/*'] }, (details) => {
     if (details.error !== 'net::ERR_ABORTED')
       failedRequests.push(`${details.url}: ${details.error}`);
   });
-  for (const ui of ['renderer', 'settings', 'syncui', 'stats']) {
+  for (const ui of ['renderer', 'settings', 'syncui']) {
     const win = new BrowserWindow({
       show: false,
       webPreferences: {
@@ -63,22 +68,46 @@ async function smoke() {
       },
     });
     try {
-      await win.loadFile(
-        path.join(archive, ui === 'stats' ? 'stats/dist/index.html' : `dist/${ui}/index.html`),
+      await win.loadFile(path.join(archive, `dist/${ui}/index.html`));
+      const loaded = await win.webContents.executeJavaScript(
+        `document.fonts.load('400 16px "M PLUS 1"', '日本語').then(fonts => fonts.length > 0 && fonts.every(font => font.status === 'loaded'))`,
       );
-      if (ui !== 'stats') {
-        const loaded = await win.webContents.executeJavaScript(
-          `document.fonts.load('400 16px "M PLUS 1"', '日本語').then(fonts => fonts.length > 0 && fonts.every(font => font.status === 'loaded'))`,
-        );
-        assert(loaded, `${ui}: shared Japanese font failed to load`);
-      }
+      assert(loaded, `${ui}: shared Japanese font failed to load`);
     } finally {
       win.destroy();
     }
   }
+  // The stats dashboard uses HTTP for both assets and API requests in the app.
+  const { ImmersionTrackerService } = packagedRequire(
+    './dist/core/services/immersion-tracker-service.js',
+  );
+  const { createStatsApp, startNodeHttpServer } = packagedRequire(
+    './dist/core/services/stats-server.js',
+  );
+  const tracker = new ImmersionTrackerService({ dbPath: path.join(isolatedData, 'stats.db') });
+  const statsConfig = { port: 0, staticDir: path.join(archive, 'stats/dist'), tracker };
+  let statsHttp;
+  const statsServer = await startNodeHttpServer(
+    createStatsApp(tracker, statsConfig),
+    statsConfig,
+    (listener) => (statsHttp = http.createServer(listener)),
+  );
+  const statsWindow = new BrowserWindow({ show: false });
+  try {
+    const url = `http://127.0.0.1:${statsHttp.address().port}`;
+    session.defaultSession.webRequest.onCompleted({ urls: [`${url}/*`] }, (details) => {
+      if (details.statusCode >= 400) failedRequests.push(`${details.url}: ${details.statusCode}`);
+    });
+    await statsWindow.loadURL(url);
+    assert.equal((await fetch(`${url}/api/stats/overview`)).status, 200);
+  } finally {
+    statsWindow.destroy();
+    await statsServer.close();
+    tracker.destroy();
+  }
   assert.deepEqual(failedRequests, [], 'Packaged UI resources failed to load');
   console.log(
-    'Package smoke passed: SQLite, platform FFI, texthooker, Yomitan loading, UI pages, shared Japanese font.',
+    'Package smoke passed: SQLite, platform FFI, texthooker, both dictionary extensions, UI pages, stats HTTP, shared Japanese font.',
   );
 }
 
