@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import test from 'node:test';
+import * as vm from 'node:vm';
 import {
   countTermsFindLookups,
   createDeps,
@@ -22,6 +23,43 @@ import {
   syncYomitanDefaultAnkiServer,
   upsertYomitanDictionarySettings,
 } from './yomitan-parser-runtime';
+
+test('Yomitan restores direct Anki after disabling its managed proxy without a page helper', async () => {
+  const options = { profiles: [{ options: { anki: { server: 'http://127.0.0.1:8765' } } }] };
+  let managedUrl: string | null = null;
+  const context = vm.createContext({
+    chrome: {
+      storage: {
+        local: {
+          get: async () => ({ subminerAnkiProxyUrl: managedUrl }),
+          set: async (value: { subminerAnkiProxyUrl: string | null }) => {
+            managedUrl = value.subminerAnkiProxyUrl;
+          },
+        },
+      },
+      runtime: {
+        sendMessage: (
+          message: { action: string },
+          callback: (response: { result: unknown }) => void,
+        ) => callback({ result: message.action === 'optionsGetFull' ? options : null }),
+      },
+    },
+  });
+  const deps = createDeps(async (script) =>
+    structuredClone(await vm.runInContext(script, context)),
+  );
+  const logger = { error: assert.fail };
+  assert.equal(
+    await syncYomitanDefaultAnkiServer('http://127.0.0.1:8766', deps, logger, {
+      forceOverride: true,
+    }),
+    true,
+  );
+  assert.equal(managedUrl, 'http://127.0.0.1:8766');
+  assert.equal(await syncYomitanDefaultAnkiServer('http://127.0.0.1:8765', deps, logger), true);
+  assert.equal(options.profiles[0]?.options.anki.server, 'http://127.0.0.1:8765');
+  assert.equal(managedUrl, null);
+});
 
 test('syncYomitanDefaultAnkiServer updates default profile server when script reports update', async () => {
   let scriptValue = '';

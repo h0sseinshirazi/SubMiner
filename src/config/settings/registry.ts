@@ -341,7 +341,7 @@ function humanizePath(path: string): string {
 }
 
 function categoryAndSection(path: string): { category: ConfigSettingsCategory; section: string } {
-  if (path === 'dictionaryBackend') {
+  if (path === 'dictionaryBackend' || path.startsWith('hachidori.')) {
     return { category: 'integrations', section: 'Dictionary Lookup' };
   }
   if (

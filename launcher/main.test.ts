@@ -1112,3 +1112,54 @@ test('classifyJellyfinChildSelection keeps container drilldown state instead of 
     id: 'season-2',
   });
 });
+
+test('external Yomitan profile remains available while a running app awaits a backend switch', () => {
+  withTempDir((dir) => {
+    const env = makeTestEnv(dir, path.join(dir, 'config'));
+    const configPath = resolveConfigFilePath({
+      appDataDir: env.APPDATA,
+      xdgConfigHome: env.XDG_CONFIG_HOME,
+      homeDir: dir,
+      existsSync: () => false,
+    });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        dictionaryBackend: 'hachidori',
+        yomitan: { externalProfilePath: '/external/yomitan-profile' },
+      }),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--eval',
+        `
+      import assert from 'node:assert/strict';
+      import { hasLauncherExternalYomitanProfileConfig } from './launcher/config.ts';
+      import { ensureLauncherSetupReady } from './launcher/setup-gate.ts';
+      import { createDefaultSetupState } from './src/shared/setup-state.ts';
+      for (const running of [true, false]) {
+        let launches = 0;
+        let tick = 0;
+        const ready = await ensureLauncherSetupReady({
+          dictionaryBackend: 'hachidori',
+          isAppRunning: async () => running,
+          readSetupState: () => ({ ...createDefaultSetupState(), dictionaryBackend: 'yomitan' }),
+          isExternalYomitanConfigured: hasLauncherExternalYomitanProfileConfig,
+          launchSetupApp: () => { launches += 1; },
+          sleep: async () => {},
+          now: () => tick++,
+          timeoutMs: 2,
+          pollIntervalMs: 1,
+        });
+        assert.equal(ready, running);
+        assert.equal(launches, running ? 0 : 1);
+      }
+    `,
+      ],
+      { cwd: process.cwd(), env, encoding: 'utf8', timeout: LAUNCHER_RUN_TIMEOUT_MS },
+    );
+    assert.equal(result.status, 0, result.stderr);
+  });
+});

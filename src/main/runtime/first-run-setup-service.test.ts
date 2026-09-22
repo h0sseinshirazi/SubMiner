@@ -815,6 +815,36 @@ test('switching to Hachidori requires its own dictionaries and persists backend 
   });
 });
 
+test('reopening setup for legacy plugin cleanup preserves both backend completions', async () => {
+  await withTempDir(async (configDir) => {
+    fs.writeFileSync(path.join(configDir, 'config.jsonc'), '{}');
+    const yomitan = createFirstRunSetupService({
+      configDir,
+      getYomitanDictionaryCount: async () => 1,
+      detectPluginInstalled: () => false,
+      detectLegacyMpvPluginCandidates: () => [
+        { path: '/tmp/mpv/scripts/subminer.lua', kind: 'file' },
+      ],
+    });
+    await yomitan.ensureSetupStateInitialized();
+    const reopened = await yomitan.markSetupInProgress();
+    assert.equal(reopened.state.status, 'in_progress');
+    assert.deepEqual(reopened.state.completedDictionaryBackends, ['yomitan']);
+    assert.equal(yomitan.isSetupCompleted(), false);
+
+    const hachidori = createFirstRunSetupService({
+      configDir,
+      getDictionaryBackend: () => 'hachidori',
+      getYomitanDictionaryCount: async () => 1,
+      detectPluginInstalled: () => false,
+    });
+    const switched = await hachidori.ensureSetupStateInitialized();
+    assert.deepEqual(switched.state.completedDictionaryBackends, ['yomitan', 'hachidori']);
+    const restored = await yomitan.getSetupStatus();
+    assert.equal(restored.state.status, 'completed');
+  });
+});
+
 test('a legacy completed Yomitan state file survives a first Hachidori run', async () => {
   await withTempDir(async (configDir) => {
     fs.writeFileSync(path.join(configDir, 'config.jsonc'), '{}');

@@ -47,7 +47,7 @@ async function createHarness(emptyLibrary = false) {
     ],
   };
   let dictionaries = [
-    { id: 'terms', title: 'JMdict', enabled: true, revision: '1' },
+    { id: 'terms', title: 'JMdict', displayName: 'Main dictionary', enabled: true, revision: '1' },
     { id: 'names', title: characterDictionary, enabled: true, revision: '1' },
     {
       id: 'frequency',
@@ -55,6 +55,7 @@ async function createHarness(emptyLibrary = false) {
       enabled: true,
       revision: '1',
       frequencyMode: 'rank-based',
+      frequencyCount: 1,
     },
   ];
   let duplicate = false;
@@ -423,6 +424,44 @@ test('Hachidori stats mining returns note IDs and prevents duplicate submissions
     duplicateNoteIds: [15],
   });
   assert.equal(harness.messages.filter((message) => message.type === 'hd_anki_submit').length, 1);
+});
+
+test('Hachidori mining requests render native dictionary aliases and frequency markers', async () => {
+  const harness = await createHarness();
+  await addYomitanNoteViaSearch('食べる', harness.deps, { error: assert.fail });
+  const request = harness.messages.find((message) => message.type === 'hd_anki_preflight')?.request;
+  assert.ok(request && typeof request === 'object');
+  assert.ok('subminerEnrich' in request && request.subminerEnrich === false);
+  const native: unknown = await import(
+    pathToFileURL(path.join(extensionPath, 'anki-values.js')).href
+  );
+  assert.ok(native && typeof native === 'object' && 'buildAnkiFields' in native);
+  assert.equal(typeof native.buildAnkiFields, 'function');
+  if (typeof native.buildAnkiFields !== 'function') assert.fail('Native renderer is unavailable');
+  const fields: unknown = await native.buildAnkiFields(
+    request,
+    {
+      Dictionary: { value: '{dictionary-alias}' },
+      Frequency: { value: '{single-frequency-frequency}' },
+      Rank: { value: '{frequency-harmonic-rank}' },
+    },
+    {},
+  );
+  assert.deepEqual(fields, {
+    Dictionary: 'Main dictionary',
+    Frequency: '<ul style="text-align: left;"><li>Frequency: </li></ul>',
+    Rank: '42',
+  });
+  assert.ok('dictionaryIds' in request);
+  assert.deepEqual(request.dictionaryIds, {
+    JMdict: 'terms',
+    [characterDictionary]: 'names',
+    Frequency: 'frequency',
+  });
+  assert.deepEqual(
+    harness.messages.find((message) => message.type === 'hd_anki_submit')?.request,
+    request,
+  );
 });
 
 test('Hachidori settings automation imports ZIP bytes and removes the matching dictionary ID', async () => {

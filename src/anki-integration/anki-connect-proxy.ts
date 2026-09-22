@@ -264,12 +264,23 @@ export class AnkiConnectProxyServer {
       return;
     }
 
-    this.maybeTrackDuplicateNoteIds(requestJson, action, responseResult);
-
     const noteIds =
       action === 'multi'
         ? this.collectMultiResultIds(requestJson, responseResult)
         : this.collectNoteIdsForAction(action, responseResult);
+    const params = requestJson.params;
+    if (
+      action === 'addNote' &&
+      params &&
+      typeof params === 'object' &&
+      'subminerEnrich' in params &&
+      params.subminerEnrich === false
+    ) {
+      // Stats owns the saved sentence and media; the live mpv context is unrelated.
+      if (noteIds.length > 0) this.deps.recordCardsAdded?.(noteIds.length, noteIds);
+      return;
+    }
+    this.maybeTrackDuplicateNoteIds(requestJson, action, responseResult);
     if (noteIds.length === 0 && shouldFallbackToLatestAdded) {
       void this.enqueueMostRecentAddedNote();
       return;

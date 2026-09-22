@@ -236,11 +236,22 @@ export const HACHIDORI_PARSER_BRIDGE_SCRIPT = String.raw`
       const lookup = await engine('hd_lookup', { text: word, maxResults: 1 });
       const result = lookup.results[0];
       if (!result) return { noteId: null, duplicateNoteIds: [] };
+      // Match the dictionary context supplied by Hachidori's popup to its
+      // native glossary, alias, and frequency template renderers.
+      const { dictionaries } = await readState();
+      const frequencyModes = new Map(dictionaries.map(entry => [entry.title, entry.frequencyMode]));
+      const term = { ...result.term, frequencies: result.term.frequencies.map(group =>
+        ({ ...group, frequencyMode: frequencyModes.get(group.dictionary) })) };
       const status = await send('hd_anki_status', {}, 'hachidori-anki');
       const request = {
-        ...result, generation: lookup.generation, sentence: word, searchQuery: word,
+        ...result, term, generation: lookup.generation, sentence: word, searchQuery: word,
         matchOffset: 0, documentTitle: 'SubMiner', popupSelectionText: '',
-        configKey: status.configKey,
+        configKey: status.configKey, subminerEnrich: false,
+        dictionaryAliases: Object.fromEntries(dictionaries.filter(entry => entry.displayName)
+          .map(entry => [entry.title, entry.displayName])),
+        dictionaryIds: Object.fromEntries(dictionaries.map(entry => [entry.title, entry.id])),
+        frequencyDictionaries: dictionaries.filter(entry => entry.enabled !== false && entry.frequencyCount > 0)
+          .map(entry => entry.title),
         captureUnavailable: ['screenshot', 'animation', 'audio'],
       };
       const preflight = await send('hd_anki_preflight', { request }, 'hachidori-anki');

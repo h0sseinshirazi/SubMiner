@@ -336,7 +336,6 @@ export function createFirstRunSetupService(deps: {
   // incomplete until its own dictionaries are ready.
   const projectState = (stored: SetupState): SetupState => {
     const backend = getDictionaryBackend();
-    if (getSetupStateDictionaryBackend(stored) === backend) return stored;
     const finishedBefore = hasCompletedSetupForBackend(stored, backend);
     // Legacy files carry their completion only as the recorded status; keep it.
     const storedBackend = getSetupStateDictionaryBackend(stored);
@@ -346,6 +345,7 @@ export function createFirstRunSetupService(deps: {
         ...(stored.status === 'completed' ? [storedBackend] : []),
       ]),
     ];
+    if (storedBackend === backend) return { ...stored, completedDictionaryBackends };
     return {
       ...stored,
       dictionaryBackend: backend,
@@ -364,7 +364,10 @@ export function createFirstRunSetupService(deps: {
     state = {
       ...state,
       dictionaryBackend: backend,
-      completedDictionaryBackends: state.status === 'completed' ? [...others, backend] : others,
+      completedDictionaryBackends:
+        state.status === 'completed'
+          ? [...others, backend]
+          : (state.completedDictionaryBackends ?? []),
     };
     writeSetupState(setupStatePath, state);
     completed = state.status === 'completed';

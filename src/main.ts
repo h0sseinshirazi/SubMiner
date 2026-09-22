@@ -2668,11 +2668,18 @@ const characterDictionaryAutoSyncRuntime = createCharacterDictionaryAutoSyncRunt
       return false;
     }
     await ensureYomitanExtensionLoaded();
-    return await importYomitanDictionaryFromZip(zipPath, getYomitanParserRuntimeDeps(), {
-      error: (message, ...args) => logger.error(message, ...args),
-      info: (message, ...args) => logger.info(message, ...args),
-    });
+    return await importYomitanDictionaryFromZip(
+      zipPath,
+      getYomitanParserRuntimeDeps(),
+      {
+        error: (message, ...args) => logger.error(message, ...args),
+        info: (message, ...args) => logger.info(message, ...args),
+      },
+      configService.getConfig().hachidori.externalHostManagementUrl,
+    );
   },
+  dictionaryImportReplacesExisting: () =>
+    getYomitanParserRuntimeDeps().getYomitanExt()?.name === 'Hachidori',
   deleteYomitanDictionary: async (dictionaryTitle) => {
     if (yomitanProfilePolicy.isExternalReadOnlyMode()) {
       yomitanProfilePolicy.logSkippedWrite(
@@ -5232,7 +5239,7 @@ function initializeOverlayRuntime(): void {
 
 function openYomitanSettings(): boolean {
   if (activeDictionaryBackend === 'hachidori') {
-    if (configService.getConfig().yomitan.externalProfilePath.trim()) {
+    if (yomitanProfilePolicy.isExternalReadOnlyMode()) {
       logger.warn('Yomitan settings unavailable while using read-only external-profile mode.');
       return false;
     }

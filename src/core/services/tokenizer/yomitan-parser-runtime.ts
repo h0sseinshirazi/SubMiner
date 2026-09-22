@@ -1,6 +1,7 @@
 import type { BrowserWindow, Extension, Session } from 'electron';
 import type { AnkiConnectConfig } from '../../../types';
 import { buildHachidoriAnkiHints } from './hachidori-anki-settings';
+import { uploadHachidoriDictionary } from './hachidori-dictionary-import';
 import {
   buildHachidoriSharingScript,
   parseHachidoriHostStatus,
@@ -681,6 +682,18 @@ async function ensureYomitanParserWindow(
       }
       if (isHachidoriExtension(yomitanExt)) {
         await parserWindow.webContents.executeJavaScript(HACHIDORI_PARSER_BRIDGE_SCRIPT, true);
+      } else {
+        // did-finish-load precedes the search page's asynchronous backend initialization.
+        await parserWindow.webContents.executeJavaScript(
+          `(async () => {
+          const deadline = Date.now() + 10000;
+          while (typeof window.__subminerAddNote !== 'function') {
+            if (Date.now() >= deadline) throw new Error('Yomitan search page initialization timed out');
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        })()`,
+          true,
+        );
       }
       // Eagerly install the scan runtime so the first subtitle line does not
       // pay the install round trip; failures fall back to the per-request
@@ -1428,10 +1441,8 @@ export async function syncYomitanDefaultAnkiServer(
           server: targetServer, deck: targetDeck, forceOverride, hints: hachidoriHints,
         });
       }
-      let previousManagedProxy = null;
-      if (typeof globalThis.__subminerSetAnkiProxyUrl === 'function') {
-        previousManagedProxy = await globalThis.__subminerSetAnkiProxyUrl(forceOverride ? targetServer : null);
-      }
+      const { subminerAnkiProxyUrl: previousManagedProxy } = await chrome.storage.local.get('subminerAnkiProxyUrl');
+      await chrome.storage.local.set({ subminerAnkiProxyUrl: forceOverride ? targetServer : null });
       const optionsFull = await invoke("optionsGetFull", undefined);
       const profiles = Array.isArray(optionsFull.profiles) ? optionsFull.profiles : [];
       if (profiles.length === 0) {
@@ -1783,11 +1794,36 @@ export async function importYomitanDictionaryFromZip(
   zipPath: string,
   deps: YomitanParserRuntimeDeps,
   logger: LoggerLike,
+  hachidoriManagementUrl = '',
 ): Promise<boolean> {
   const normalizedZipPath = zipPath.trim();
   if (!normalizedZipPath || !fs.existsSync(normalizedZipPath)) {
     logger.error(`Dictionary ZIP not found: ${zipPath}`);
     return false;
+  }
+
+  const extension = deps.getYomitanExt();
+  if (extension && isHachidoriExtension(extension)) {
+    try {
+      const host = await requestHachidoriSharing({ type: 'hd_sharing_status' }, deps, logger);
+      if (host.kind === 'disconnected' || host.kind === 'unavailable')
+        throw new Error(host.message);
+      if (host.kind === 'connected') {
+        await uploadHachidoriDictionary(normalizedZipPath, hachidoriManagementUrl);
+        const window = deps.getYomitanParserWindow();
+        if (window) clearYomitanParserCachesForWindow(window);
+        logger.info?.(
+          `Uploaded character dictionary to Hachidori host: ${path.basename(normalizedZipPath)}`,
+        );
+        return true;
+      }
+    } catch (error) {
+      logger.error(
+        'Hachidori character dictionary import failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return false;
+    }
   }
 
   const supportsUrlImport = await invokeYomitanSettingsAutomation<boolean>(

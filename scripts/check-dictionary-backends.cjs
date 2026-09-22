@@ -7,7 +7,11 @@ if (process.platform !== 'linux')
   throw new Error('This app-entry smoke requires Linux XDG isolation.');
 const root = process.cwd();
 const backend = process.argv.includes('--backend=yomitan') ? 'yomitan' : 'hachidori';
-const profile = fs.mkdtempSync('/tmp/subminer-hachi-settings-');
+const profile = process.env.SUBMINER_DICTIONARY_SMOKE_DATA;
+assert(
+  profile && fs.existsSync(profile),
+  'Use bun run test:dictionary:electron for profile isolation',
+);
 process.env.XDG_CONFIG_HOME = profile;
 process.env.XDG_DATA_HOME = path.join(profile, 'data');
 fs.mkdirSync(path.join(profile, 'SubMiner'));
@@ -15,6 +19,10 @@ fs.writeFileSync(
   path.join(profile, 'SubMiner', 'config.json'),
   JSON.stringify({
     dictionaryBackend: backend,
+    // An inactive external Yomitan profile must not block bundled settings in Hachidori mode.
+    yomitan: {
+      externalProfilePath: backend === 'hachidori' ? path.join(profile, 'external-yomitan') : '',
+    },
     mpv: { socketPath: path.join(profile, 'missing-mpv.sock') },
     ankiConnect: { enabled: false },
     startupWarmups: { lowPowerMode: true },
@@ -39,8 +47,12 @@ const deadline = setTimeout(() => {
     'FAIL timeout',
     BrowserWindow.getAllWindows().map((w) => w.webContents.getURL()),
   );
-  app.exit(1);
+  finish(1);
 }, 60000);
+function finish(exitCode) {
+  clearTimeout(deadline);
+  app.exit(exitCode);
+}
 (async () => {
   await app.whenReady();
   let window;
@@ -102,9 +114,8 @@ const deadline = setTimeout(() => {
     `PASS ${backend} overlay session, independent settings windows, real preload external link bridge`,
   );
 
-  clearTimeout(deadline);
-  app.exit(0);
+  finish(0);
 })().catch((error) => {
   console.error(error);
-  app.exit(1);
+  finish(1);
 });

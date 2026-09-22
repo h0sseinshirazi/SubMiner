@@ -177,6 +177,8 @@ The configuration file includes several main sections:
 
 Each backend stores its own dictionaries and mining settings. `yomitan.externalProfilePath` applies only to Yomitan. See [Hachidori setup](./usage.md#hachidori-setup) before switching an existing installation.
 
+`hachidori.externalHostManagementUrl` specifies the linked Docker host's HTTP(S) management origin for automatic character dictionary uploads and replacement. Use the management port, not the sharing or dictionary API port. See [Hachidori setup](./usage.md#hachidori-setup) for an example and [the generated configuration example](/config.example.jsonc) for the default.
+
 ### Logging
 
 Control the minimum log level for runtime output:

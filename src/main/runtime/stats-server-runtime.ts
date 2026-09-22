@@ -18,7 +18,10 @@ import {
   writeBackgroundStatsServerState,
 } from './stats-daemon';
 import { createEnsureStatsServerUrlHandler } from './stats-server-routing';
-import { shouldForceOverrideYomitanAnkiServer } from './yomitan-anki-server';
+import {
+  getPreferredYomitanAnkiServerUrl,
+  shouldForceOverrideYomitanAnkiServer,
+} from './yomitan-anki-server';
 
 export function isSelfOwnedBackgroundStatsDaemonState(state: {
   pid: number;
@@ -168,7 +171,7 @@ export function createStatsServerRuntime(deps: StatsServerRuntimeDeps): {
       resolveSentenceSearchHeadwords: (term: string) => deps.resolveSentenceSearchHeadwords(term),
       addYomitanNote: async (word: string) => {
         const ankiConnectConfig = deps.getResolvedConfig().ankiConnect;
-        const ankiUrl = ankiConnectConfig.url || 'http://127.0.0.1:8765';
+        const ankiUrl = getPreferredYomitanAnkiServerUrl(ankiConnectConfig);
         await syncYomitanDefaultAnkiServerCore(ankiUrl, yomitanDeps, yomitanLogger, {
           forceOverride: shouldForceOverrideYomitanAnkiServer(ankiConnectConfig),
           deck: ankiConnectConfig.deck,

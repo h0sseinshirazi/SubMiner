@@ -23,6 +23,7 @@ export type {
 
 const {
   dictionaryBackend,
+  hachidori,
   subtitlePosition,
   keybindings,
   websocket,
@@ -59,6 +60,7 @@ const { stats } = STATS_DEFAULT_CONFIG;
 export const DEFAULT_CONFIG: ResolvedConfig = {
   subtitleGeneration: { ...DEFAULT_SUBTITLE_GENERATION_CONFIG },
   dictionaryBackend,
+  hachidori,
   subtitlePosition,
   keybindings,
   websocket,

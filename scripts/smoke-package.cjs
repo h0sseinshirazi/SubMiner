@@ -99,7 +99,11 @@ async function smoke() {
       if (details.statusCode >= 400) failedRequests.push(`${details.url}: ${details.statusCode}`);
     });
     await statsWindow.loadURL(url);
-    assert.equal((await fetch(`${url}/api/stats/overview`)).status, 200);
+    for (const endpoint of ['overview', 'sessions']) {
+      const response = await fetch(`${url}/api/stats/${endpoint}`);
+      assert.equal(response.status, 200, `Stats ${endpoint} request failed`);
+      await response.json();
+    }
   } finally {
     statsWindow.destroy();
     await statsServer.close();

@@ -108,10 +108,7 @@ export function loadLauncherDictionaryBackend(): DictionaryBackend {
 }
 
 export function hasLauncherExternalYomitanProfileConfig(): boolean {
-  const config = readLauncherMainConfigObject();
-  return (
-    config?.dictionaryBackend !== 'hachidori' && readExternalYomitanProfilePath(config) !== null
-  );
+  return readExternalYomitanProfilePath(readLauncherMainConfigObject()) !== null;
 }
 
 export function readPluginRuntimeConfig(logLevel: LogLevel): PluginRuntimeConfig {

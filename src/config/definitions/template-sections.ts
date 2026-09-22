@@ -10,6 +10,14 @@ const CORE_TEMPLATE_SECTIONS: ConfigTemplateSection[] = [
     key: 'dictionaryBackend',
   },
   {
+    title: 'Hachidori External Dictionary Imports',
+    description: [
+      'Configure the linked Docker host management URL, for example http://127.0.0.1:8780.',
+    ],
+    notes: ['Used only while Hachidori is linked to an external host.'],
+    key: 'hachidori',
+  },
+  {
     title: 'Japanese Subtitle Generation',
     description: [
       'Generate timed Japanese subtitles from local audio using whisper.cpp.',
