@@ -11,6 +11,19 @@ export const YOMITAN_POPUP_COMMAND_EVENT = 'subminer-yomitan-popup-command';
 export const YOMITAN_LOOKUP_EVENT = 'subminer-yomitan-lookup';
 export const PRIMARY_SUB_VISIBLE_ON_YOMITAN_POPUP_CLASS = 'primary-sub-visible-on-yomitan-popup';
 
+// Only the active backend injects a reader. Consume its native attention events.
+export function registerDictionaryPopupVisibilityListener(
+  state: 'shown' | 'hidden',
+  listener: () => void,
+  target: EventTarget = window,
+): () => void {
+  const events = [`yomitan-popup-${state}`, `hachidori-popup-${state}`];
+  for (const event of events) target.addEventListener(event, listener);
+  return () => {
+    for (const event of events) target.removeEventListener(event, listener);
+  };
+}
+
 export function registerYomitanLookupListener(
   target: EventTarget = window,
   listener: () => void,

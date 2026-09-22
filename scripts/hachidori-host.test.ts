@@ -25,7 +25,7 @@ function run(code: string) {
   });
 }
 
-test('Hachidori publishes popup state independently from successful lookups', () => {
+test('Hachidori marks popup state independently from successful lookups', () => {
   run(`
     const events = [];
     for (const name of ['yomitan-popup-shown', 'yomitan-popup-hidden', 'subminer-yomitan-lookup']) {
@@ -33,13 +33,13 @@ test('Hachidori publishes popup state independently from successful lookups', ()
     }
     const attributes = new Map();
     const host = { setAttribute: (name, value) => attributes.set(name, value) };
-    SubMinerHachidori.attention(host, true);
+    SubMinerHachidori.markHost(host, true);
     assert.equal(attributes.get('data-subminer-yomitan-popup-visible'), 'true');
-    assert.equal(events.join(','), 'yomitan-popup-shown');
+    assert.equal(events.join(','), '');
     SubMinerHachidori.lookup();
-    SubMinerHachidori.attention(host, false);
+    SubMinerHachidori.markHost(host, false);
     assert.equal(attributes.get('data-subminer-yomitan-popup-visible'), 'false');
-    assert.equal(events.join(','), 'yomitan-popup-shown,subminer-yomitan-lookup,yomitan-popup-hidden');
+    assert.equal(events.join(','), 'subminer-yomitan-lookup');
   `);
 });
 

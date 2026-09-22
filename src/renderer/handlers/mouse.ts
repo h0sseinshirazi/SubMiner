@@ -1,10 +1,9 @@
 import type { ModalStateReader, RendererContext } from '../context';
 import { syncOverlayMouseIgnoreState } from '../overlay-mouse-ignore.js';
 import {
-  YOMITAN_POPUP_HIDDEN_EVENT,
   YOMITAN_POPUP_MOUSE_ENTER_EVENT,
   YOMITAN_POPUP_MOUSE_LEAVE_EVENT,
-  YOMITAN_POPUP_SHOWN_EVENT,
+  registerDictionaryPopupVisibilityListener,
   PRIMARY_SUB_VISIBLE_ON_YOMITAN_POPUP_CLASS,
   isYomitanPopupVisible,
   isYomitanPopupIframe,
@@ -470,7 +469,7 @@ export function createMouseHandlers(
   function setupYomitanObserver(): void {
     reconcilePopupInteraction({ allowPause: true });
 
-    window.addEventListener(YOMITAN_POPUP_SHOWN_EVENT, () => {
+    registerDictionaryPopupVisibilityListener('shown', () => {
       reconcilePopupInteraction({
         assumeVisible: true,
         allowPause: true,
@@ -478,7 +477,7 @@ export function createMouseHandlers(
       });
     });
 
-    window.addEventListener(YOMITAN_POPUP_HIDDEN_EVENT, () => {
+    registerDictionaryPopupVisibilityListener('hidden', () => {
       disablePopupInteractionIfIdle();
     });
 

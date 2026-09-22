@@ -2,8 +2,7 @@ import type { CompiledSessionBinding, PrimarySubMode, ShortcutsConfig } from '..
 import type { RendererContext } from '../context';
 import { createMpvInputForwarding } from './mpv-input-forwarding';
 import {
-  YOMITAN_POPUP_HIDDEN_EVENT,
-  YOMITAN_POPUP_SHOWN_EVENT,
+  registerDictionaryPopupVisibilityListener,
   YOMITAN_POPUP_COMMAND_EVENT,
   isYomitanPopupVisible,
   isYomitanPopupIframe,
@@ -1064,7 +1063,7 @@ export function createKeyboardHandlers(
       subtree: true,
     });
 
-    window.addEventListener(YOMITAN_POPUP_HIDDEN_EVENT, () => {
+    registerDictionaryPopupVisibilityListener('hidden', () => {
       clearNativeSubtitleSelection();
       if (!ctx.state.keyboardDrivenModeEnabled) {
         syncKeyboardTokenSelection();
@@ -1072,7 +1071,7 @@ export function createKeyboardHandlers(
       }
       restoreOverlayKeyboardFocus();
     });
-    window.addEventListener(YOMITAN_POPUP_SHOWN_EVENT, () => {
+    registerDictionaryPopupVisibilityListener('shown', () => {
       if (!ctx.state.keyboardDrivenModeEnabled) {
         return;
       }

@@ -30,6 +30,20 @@ for (const file of [
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 fs.cpSync(extension, output, { recursive: true });
+// Host configuration belongs in the staged copy, leaving the fork usable in Chrome.
+const overlayPath = path.join(output, 'overlay-mode.js');
+let overlay = fs.readFileSync(overlayPath, 'utf8');
+for (const [original, replacement] of [
+  ['export const OVERLAY_MODE = false;', 'export const OVERLAY_MODE = true;'],
+  ['customJavaScript: !IS_FIREFOX,', 'customJavaScript: false,'],
+]) {
+  if (!overlay.includes(original))
+    throw new Error(`Hachidori host configuration changed upstream: ${original}`);
+  overlay = overlay.replace(original, replacement);
+}
+fs.writeFileSync(overlayPath, overlay);
+manifest.permissions = manifest.permissions.filter((permission) => permission !== 'userScripts');
+fs.writeFileSync(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 for (const file of ['LICENSE', 'SOURCE.json', 'README.md']) {
   fs.copyFileSync(path.join(source, file), path.join(output, file));
 }
