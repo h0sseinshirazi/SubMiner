@@ -3,6 +3,21 @@ import { toFfmpegInputHttpArgs, type ResolvedMpvHttpHeaders } from './mpv-http-h
 export interface SubtitleGenerationRemoteSource {
   httpHeaders: ResolvedMpvHttpHeaders;
   cacheDirectory: string;
+  sessionDirectory?: string;
+  alternatives?: readonly SubtitleGenerationAlternative[];
+  selectedAudio?: {
+    url: string;
+    audioStreamIndex?: number;
+    delaySeconds: number;
+    httpHeaders: ResolvedMpvHttpHeaders;
+  };
+}
+
+export interface SubtitleGenerationAlternative {
+  kind: 'audio' | 'video';
+  url: string;
+  label: string;
+  httpHeaders: ResolvedMpvHttpHeaders;
 }
 
 /** Apply only to network inputs, including embedded subtitle reference extraction. */

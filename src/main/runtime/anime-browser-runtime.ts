@@ -529,6 +529,7 @@ export function createAnimeBrowserRuntime(deps: AnimeBrowserRuntimeDeps) {
   });
 
   return {
+    getSubtitleGenerationSources: playback.getSubtitleGenerationSources,
     getSnapshot(sessionId = 'default'): AnimeBrowserSnapshot {
       const session = getBrowserSession(sessionId);
       return {

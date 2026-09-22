@@ -9,13 +9,11 @@ import type {
 } from '../../shared/subtitle-generation';
 import { isMissingFile, resolveSubtitleGenerationModel } from './subtitle-generation-models';
 import { runSubtitleGenerationProcess } from './subtitle-generation-process';
+import { prepareSubtitleGenerationAudio } from './subtitle-generation-audio';
 import { publishSubtitleGenerationFile } from './subtitle-generation-files';
 import { formatTimestamp } from './subtitle-generation-srt';
 import { transcribeSubtitleDialogue } from './subtitle-generation-dialogue';
-import {
-  subtitleGenerationHttpArgs,
-  type SubtitleGenerationRemoteSource,
-} from './subtitle-generation-source';
+import { type SubtitleGenerationRemoteSource } from './subtitle-generation-source';
 import {
   loadSubtitleGenerationReference,
   type SubtitleGenerationReference,
@@ -30,70 +28,6 @@ export {
   resolveSubtitleGenerationModel,
 } from './subtitle-generation-models';
 export { resolveSubtitleGenerationTools } from './subtitle-generation-tools';
-
-function numericTime(value: unknown): number | undefined {
-  if (typeof value !== 'number' && typeof value !== 'string') return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
-}
-
-function parseAudioProbe(raw: string, selectedIndex: number | undefined) {
-  const value: unknown = JSON.parse(raw);
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !('streams' in value) ||
-    !Array.isArray(value.streams)
-  ) {
-    throw new Error('ffprobe did not return media streams.');
-  }
-  const streams = value.streams.flatMap((stream: unknown) => {
-    if (
-      typeof stream !== 'object' ||
-      stream === null ||
-      !('codec_type' in stream) ||
-      stream.codec_type !== 'audio' ||
-      !('index' in stream) ||
-      typeof stream.index !== 'number' ||
-      !Number.isInteger(stream.index) ||
-      stream.index < 0
-    )
-      return [];
-    const tags = 'tags' in stream ? stream.tags : undefined;
-    const language =
-      typeof tags === 'object' && tags !== null && 'language' in tags ? tags.language : undefined;
-    return [
-      {
-        index: stream.index,
-        start: 'start_time' in stream ? numericTime(stream.start_time) : undefined,
-        duration: 'duration' in stream ? numericTime(stream.duration) : undefined,
-        japanese: language === 'ja' || language === 'jpn',
-      },
-    ];
-  });
-  const selected =
-    selectedIndex === undefined
-      ? (streams.find((stream) => stream.japanese) ?? streams[0])
-      : streams.find((stream) => stream.index === selectedIndex);
-  if (!selected)
-    throw new Error(
-      selectedIndex === undefined
-        ? 'No audio track found.'
-        : `Audio stream ${selectedIndex} was not found.`,
-    );
-  const format = 'format' in value ? value.format : undefined;
-  const formatStart =
-    typeof format === 'object' && format !== null && 'start_time' in format
-      ? (numericTime(format.start_time) ?? 0)
-      : 0;
-  const duration =
-    selected.duration ??
-    (typeof format === 'object' && format !== null && 'duration' in format
-      ? numericTime(format.duration)
-      : undefined);
-  // mpv rebases media timestamps to the container start. Extraction rebases the selected audio.
-  return { index: selected.index, offset: (selected.start ?? formatStart) - formatStart, duration };
-}
 
 function shiftSubtitleTimestamps(srt: string, offsetSeconds: number): string {
   let cueCount = 0;
@@ -211,7 +145,6 @@ export async function generateJapaneseSubtitles(input: {
       ? path.dirname(path.resolve(input.outputPath))
       : path.dirname(destinationMediaPath),
   );
-  const httpArgs = input.remote ? subtitleGenerationHttpArgs(input.remote.httpHeaders) : [];
   const model = await resolveSubtitleGenerationModel(input.config, input.modelDirectory);
   if (model.kind === 'missing')
     throw new Error(
@@ -219,70 +152,22 @@ export async function generateJapaneseSubtitles(input: {
     );
   if (model.kind === 'invalid') throw new Error(model.message);
   const tools = requireSubtitleGenerationTools(await resolveSubtitleGenerationTools(input.config));
-  input.onProgress?.({ stage: 'extract', message: 'Inspecting audio tracks...' });
-  const probe = await runSubtitleGenerationProcess({
-    command: tools.ffprobe,
-    args: [
-      '-v',
-      'error',
-      '-show_entries',
-      'stream=index,codec_type,start_time,duration:stream_tags=language:format=start_time,duration',
-      '-of',
-      'json',
-      ...httpArgs,
-      mediaPath,
-    ],
-    signal: input.signal,
-  });
-  const audio = parseAudioProbe(probe, input.audioStreamIndex);
-  if (isRemote && (!audio.duration || !Number.isFinite(audio.duration) || audio.duration <= 0))
-    throw new Error(
-      'Stream generation requires a finite episode duration. Live streams are not supported.',
-    );
-  const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'subminer-whisper-'));
+  const temporaryDirectory = await mkdtemp(
+    path.join(input.remote?.sessionDirectory ?? tmpdir(), 'subminer-whisper-'),
+  );
   try {
-    const wavPath = path.join(temporaryDirectory, 'audio.wav');
     const subtitleBase = path.join(temporaryDirectory, 'subtitles');
-    input.onProgress?.({ stage: 'extract', percent: 0, message: 'Extracting audio...' });
-    await runSubtitleGenerationProcess({
-      command: tools.ffmpeg,
-      args: [
-        '-nostdin',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        ...httpArgs,
-        '-i',
-        mediaPath,
-        '-map',
-        `0:${audio.index}`,
-        ...(isRemote ? ['-t', String(audio.duration)] : []),
-        '-vn',
-        '-af',
-        'asetpts=PTS-STARTPTS',
-        '-ac',
-        '1',
-        '-ar',
-        '16000',
-        '-c:a',
-        'pcm_s16le',
-        '-progress',
-        'pipe:1',
-        '-nostats',
-        wavPath,
-      ],
+    const audio = await prepareSubtitleGenerationAudio({
+      mediaPath,
+      audioStreamIndex: input.audioStreamIndex,
+      remote: input.remote,
+      ffprobe: tools.ffprobe,
+      ffmpeg: tools.ffmpeg,
+      directory: temporaryDirectory,
+      onProgress: input.onProgress,
       signal: input.signal,
-      onLine: (line) => {
-        const match = /^out_time_us=(\d+)$/.exec(line);
-        if (match && audio.duration && audio.duration > 0) {
-          input.onProgress?.({
-            stage: 'extract',
-            percent: Math.min(100, Math.floor(Number(match[1]) / 10000 / audio.duration)),
-            message: 'Extracting audio...',
-          });
-        }
-      },
     });
+    const { wavPath } = audio;
     input.onProgress?.({
       stage: 'transcribe',
       percent: 0,

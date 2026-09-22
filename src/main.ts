@@ -2703,10 +2703,9 @@ const characterDictionaryAutoSyncRuntime = createCharacterDictionaryAutoSyncRunt
   getOrCreateCurrentSnapshot: (targetPath, progress) =>
     characterDictionaryRuntime.getOrCreateCurrentSnapshot(targetPath, progress),
   buildMergedDictionary: (mediaIds) => characterDictionaryRuntime.buildMergedDictionary(mediaIds),
-  waitForYomitanMutationReady: () =>
-    currentMediaTokenizationGate.waitUntilReady(
-      appState.currentMediaPath?.trim() || appState.mpvClient?.currentVideoPath?.trim() || null,
-    ),
+  waitForYomitanMutationReady: async () => {
+    await ensureYomitanExtensionLoaded();
+  },
   getYomitanDictionaryInfo: async () => {
     await ensureYomitanExtensionLoaded();
     return await getYomitanDictionaryInfo(getYomitanParserRuntimeDeps(), {
@@ -6886,6 +6885,7 @@ function setOverlayVisible(visible: boolean): void {
 
 registerIpcRuntimeHandlers();
 const subtitleGenerationRuntime = createSubtitleGenerationRuntime({
+  getAlternativeSources: animeBrowserApplicationRuntime.getSubtitleGenerationSources,
   getConfig: () => configService.getConfig().subtitleGeneration,
   getCacheDirectory: () => path.join(USER_DATA_PATH, 'cache', 'generated-subtitles'),
   getModelDirectory: () =>
@@ -6907,4 +6907,19 @@ registerSubtitleGenerationIpc({
   runtime: subtitleGenerationRuntime,
   openModal: () => openSubtitleGenerationModal(createOverlayHostedModalOpenDeps()),
 });
-app.on('before-quit', () => subtitleGenerationRuntime.cancel());
+void subtitleGenerationRuntime
+  .initialize()
+  .catch((error: unknown) => logger.warn('Could not prepare temporary subtitle storage', error));
+let subtitleGenerationDisposed = false;
+let subtitleGenerationDisposal: Promise<void> | undefined;
+app.on('before-quit', (event) => {
+  if (subtitleGenerationDisposed) return;
+  event.preventDefault();
+  subtitleGenerationDisposal ??= subtitleGenerationRuntime
+    .dispose()
+    .catch((error: unknown) => logger.warn('Could not clean temporary subtitle storage', error))
+    .finally(() => {
+      subtitleGenerationDisposed = true;
+      app.quit();
+    });
+});

@@ -61,6 +61,9 @@ export interface AnimeBrowserApplicationRuntimeDeps {
 }
 
 export interface AnimeBrowserApplicationRuntime {
+  getSubtitleGenerationSources: ReturnType<
+    typeof createAnimeBrowserRuntime
+  >['getSubtitleGenerationSources'];
   publishPlaybackState: (mediaPath: string | null) => void;
   openWindow: () => boolean;
 }
@@ -165,5 +168,9 @@ export function createAnimeBrowserApplicationRuntime(
     return true;
   };
 
-  return { publishPlaybackState, openWindow };
+  return {
+    publishPlaybackState,
+    openWindow,
+    getSubtitleGenerationSources: runtime.getSubtitleGenerationSources,
+  };
 }

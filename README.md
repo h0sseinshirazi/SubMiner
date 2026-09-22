@@ -287,6 +287,15 @@ SubMiner builds on the work of these open-source projects:
 | [Yomitan](https://github.com/yomidevs/yomitan)                                              | Dictionary engine powering all lookups and the morphological parser          |
 | [yomitan-jlpt-vocab](https://github.com/stephenmk/yomitan-jlpt-vocab)                       | JLPT level tags for vocabulary                                               |
 
+## Disclaimer
+
+SubMiner is a media player and language-learning tool. The project does not
+host, supply, or link to anime, video streams, or subtitle libraries. The anime
+browser runs Aniyomi extensions that you install yourself from repositories you
+choose; SubMiner bundles none and recommends none. The SubMiner developers are
+not affiliated with any content provider and have no control over what those
+sources offer, whether they stay available, or the quality of what they serve.
+
 ## License
 
 [GNU General Public License v3.0](LICENSE)

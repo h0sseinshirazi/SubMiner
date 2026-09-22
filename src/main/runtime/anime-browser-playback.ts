@@ -15,6 +15,7 @@ import type { AnimeStreamMetadata } from '../../anime-bridge/episode-metadata';
 import type { ResolvedStream } from '../../anime-bridge/types';
 import type { AnimeBrowserPlayRequest, AnimeBrowserPlayResult } from '../../types/anime-browser';
 import type { AnimeBrowserPlaybackDeps } from './anime-browser-runtime-deps';
+import { animeSubtitleGenerationSources } from './anime-subtitle-generation-sources';
 
 const TRACK_ATTACH_DELAY_MS = 300;
 
@@ -51,6 +52,7 @@ export function createAnimeBrowserPlayback(options: AnimeBrowserPlaybackOptions)
   // Overlapping playEpisode calls share mpv and subtitleCacheDir, so each call
   // carries a generation and only acts while it is still the newest one.
   let playbackGeneration = 0;
+  const generationSources = new Map<string, ReturnType<typeof animeSubtitleGenerationSources>>();
 
   async function clearSubtitleCache(generation: number): Promise<void> {
     // A stale call must not delete the directory a newer playback now owns.
@@ -117,6 +119,17 @@ export function createAnimeBrowserPlayback(options: AnimeBrowserPlaybackOptions)
     const stream = proxy
       ? { ...selected, url: routeHlsThroughProxy(selected.url, baseUrl, proxy.origin) }
       : selected;
+    generationSources.set(
+      stream.url,
+      animeSubtitleGenerationSources(selected, streams).map((candidate) => ({
+        ...candidate,
+        url: proxy ? routeHlsThroughProxy(candidate.url, baseUrl, proxy.origin) : candidate.url,
+      })),
+    );
+    if (generationSources.size > 32) {
+      const oldest = generationSources.keys().next().value;
+      if (oldest !== undefined) generationSources.delete(oldest);
+    }
     const metadata = buildAnimeStreamMetadata({
       sourceId: request.sourceId,
       animeUrl: request.animeUrl,
@@ -340,6 +353,7 @@ export function createAnimeBrowserPlayback(options: AnimeBrowserPlaybackOptions)
     // Bumping the generation makes any in-flight playEpisode stale, so a cache
     // it is still writing gets removed by that call instead of outliving us.
     playbackGeneration += 1;
+    generationSources.clear();
     const cacheDir = subtitleCacheDir;
     subtitleCacheDir = null;
     await Promise.all(queuedTrackPreparations);
@@ -351,7 +365,15 @@ export function createAnimeBrowserPlayback(options: AnimeBrowserPlaybackOptions)
     ]);
   }
 
-  return { playEpisode, prepareEpisode, appendEpisode, activateEpisode, discardEpisode, dispose };
+  return {
+    playEpisode,
+    prepareEpisode,
+    appendEpisode,
+    activateEpisode,
+    discardEpisode,
+    dispose,
+    getSubtitleGenerationSources: (mediaPath: string) => generationSources.get(mediaPath) ?? [],
+  };
 }
 
 function superseded(): AnimeBrowserPlayResult {

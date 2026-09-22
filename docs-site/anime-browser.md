@@ -43,14 +43,16 @@ extension APK  →  bridge (JVM)  →  { url, headers }  →  mpv  →  SubMiner
 ```
 
 Because the extension resolves the stream, whichever sources you install decide
-what is available. SubMiner only hosts them.
+what is available. SubMiner runs the installed extensions locally and nothing
+more.
 
 ## Installing extensions
 
 **SubMiner ships no extension repositories and bundles no sources.** There is no
 default repository, no suggested list, and no discovery. Until you add one, the
-browser has nothing to search — that is deliberate, and it is what keeps SubMiner
-a neutral host rather than a distributor.
+browser has nothing to search — that is deliberate. Every repository and
+extension comes from you, and SubMiner is not affiliated with any of the sites
+they connect to.
 
 There are two ways to add extensions.
 

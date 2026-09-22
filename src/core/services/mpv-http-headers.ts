@@ -81,6 +81,18 @@ function parseMpvHeaderField(value: string): [string, string] | null {
   return [name, headerValue.replace(/[\r\n]+/g, ' ')];
 }
 
+/** Apply the same media-fetch header policy to extension-provided alternatives. */
+export function sanitizeMediaHttpHeaders(
+  headers: Readonly<Record<string, string>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).flatMap(([name, value]) => {
+      const field = parseMpvHeaderField(`${name}: ${value}`);
+      return field ? [field] : [];
+    }),
+  );
+}
+
 function toHeaderFields(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((entry): entry is string => typeof entry === 'string');

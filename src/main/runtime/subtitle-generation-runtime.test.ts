@@ -19,6 +19,7 @@ function fixture(overrides: Partial<SubtitleGenerationRuntimeDeps> = {}) {
     },
   };
   const runtime = createSubtitleGenerationRuntime({
+    session: { directory: async () => '/session', dispose: async () => {} },
     getConfig: () => DEFAULT_SUBTITLE_GENERATION_CONFIG,
     getModelDirectory: () => '/models',
     getCacheDirectory: () => '/cache/generated-subtitles',
@@ -60,6 +61,36 @@ test('generation uses the selected audio track and loads the timed SRT with zero
   ]);
 });
 
+test('stream alternatives are snapshotted without changing the playback identity', async () => {
+  const url = 'http://127.0.0.1:7777/video/high';
+  const alternatives = [
+    {
+      kind: 'audio' as const,
+      url: 'http://127.0.0.1:7777/audio/ja',
+      label: 'Japanese audio',
+      httpHeaders: { headers: {}, userAgent: null },
+    },
+  ];
+  const subject = fixture({
+    getAlternativeSources: (mediaPath) => {
+      assert.equal(mediaPath, url);
+      return alternatives;
+    },
+    generate: async (input) => {
+      assert.equal(input.mediaPath, url);
+      assert.deepEqual(input.remote?.alternatives, alternatives);
+      return '/cache/generated.srt';
+    },
+  });
+  const original = subject.client.requestProperty;
+  subject.client.requestProperty = async (name) => (name === 'path' ? url : original(name));
+  assert.equal((await subject.runtime.start()).ok, true);
+  assert.deepEqual(
+    subject.commands.map((command) => command[0]),
+    ['sub-add', 'set_property'],
+  );
+});
+
 test('generation preserves the output without attaching it to a different video', async () => {
   const subject = fixture({
     generate: async () => {
@@ -81,6 +112,7 @@ test('stream generation snapshots mpv headers and saves in the cache before load
       assert.equal(input.audioStreamIndex, 3);
       assert.deepEqual(input.remote, {
         cacheDirectory: '/cache/generated-subtitles',
+        sessionDirectory: '/session',
         httpHeaders: {
           headers: { Referer: 'https://anime.example/', 'X-Stream': 'episode' },
           userAgent: 'Anime Player',
@@ -222,6 +254,45 @@ test('external audio cannot silently generate from a different internal track', 
   const result = await subject.runtime.start();
   assert.equal(result.ok, false);
   assert.match(result.message, /audio track inside/);
+});
+
+test('a selected HTTP audio track keeps its own stream index, headers and playback delay', async () => {
+  const mediaPath = 'https://example.test/video';
+  const audioUrl = 'https://example.test/japanese.m4a';
+  const httpHeaders = { headers: { Referer: 'https://audio.example/' }, userAgent: null };
+  const subject = fixture({
+    getAlternativeSources: () => [
+      { kind: 'audio', url: audioUrl, label: 'Japanese audio', httpHeaders },
+    ],
+    generate: async (input) => {
+      assert.equal(input.mediaPath, mediaPath);
+      assert.equal(input.audioStreamIndex, undefined);
+      assert.deepEqual(input.remote?.selectedAudio, {
+        url: audioUrl,
+        audioStreamIndex: 0,
+        delaySeconds: 0.25,
+        httpHeaders,
+      });
+      return '/cache/generated.srt';
+    },
+  });
+  subject.client.requestProperty = async (name) => {
+    if (name === 'path') return mediaPath;
+    if (name === 'audio-delay') return 0.25;
+    if (name === 'track-list')
+      return [
+        {
+          type: 'audio',
+          selected: true,
+          external: true,
+          'external-filename': audioUrl,
+          'ff-index': 0,
+        },
+      ];
+    return null;
+  };
+  assert.equal((await subject.runtime.start()).ok, true);
+  assert.equal(subject.commands[0]?.[0], 'sub-add');
 });
 
 test('model selection is retained and used for status, download, and generation', async () => {
@@ -374,4 +445,43 @@ test('speech model downloads share the job lock and cancellation', async () => {
   await assert.rejects(runtime.setVadEnabled(true), /current operation/);
   runtime.cancel();
   assert.deepEqual(await download, { ok: false, message: 'Cancelled.' });
+});
+
+test('shutdown cancels and drains the active job before deleting session files', async () => {
+  const events: string[] = [];
+  let started = () => {};
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const { runtime } = fixture({
+    session: {
+      directory: async () => '/session',
+      dispose: async () => {
+        events.push('disposed');
+      },
+    },
+    generate: async (input) => {
+      started();
+      await new Promise<void>((resolve) =>
+        input.signal?.addEventListener(
+          'abort',
+          () => {
+            events.push('aborted');
+            setImmediate(() => {
+              events.push('job-cleaned');
+              resolve();
+            });
+          },
+          { once: true },
+        ),
+      );
+      throw new Error('cancelled');
+    },
+  });
+  const job = runtime.start();
+  await ready;
+  await runtime.dispose();
+  assert.equal((await job).ok, false);
+  assert.deepEqual(events, ['aborted', 'job-cleaned', 'disposed']);
+  assert.equal((await runtime.start()).ok, false);
 });

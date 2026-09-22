@@ -1,4 +1,9 @@
 import path from 'node:path';
+import { createSubtitleGenerationSession } from '../../core/services/subtitle-generation-session';
+import type {
+  SubtitleGenerationAlternative,
+  SubtitleGenerationRemoteSource,
+} from '../../core/services/subtitle-generation-source';
 import { resolveMpvHttpHeaders } from '../../core/services/mpv-http-headers';
 import { readSubtitleGenerationReferences } from '../../core/services/subtitle-generation-reference';
 import { detectSubtitleGenerationAcceleration } from '../../core/services/subtitle-generation-acceleration';
@@ -30,10 +35,12 @@ interface GenerationMpvClient {
 }
 
 export interface SubtitleGenerationRuntimeDeps {
+  session?: ReturnType<typeof createSubtitleGenerationSession>;
   getConfig: () => SubtitleGenerationConfig;
   getModelDirectory: () => string;
   getCacheDirectory: () => string;
   getMpvClient: () => GenerationMpvClient | null;
+  getAlternativeSources?: (mediaPath: string) => readonly SubtitleGenerationAlternative[];
   onProgress: (progress: SubtitleGenerationProgress) => void;
   generate?: typeof generateJapaneseSubtitles;
   download?: typeof downloadSubtitleGenerationModel;
@@ -55,7 +62,9 @@ async function currentMedia(client: GenerationMpvClient | null): Promise<string 
   return typeof directory === 'string' ? path.resolve(directory, media) : null;
 }
 
-function selectedAudioIndex(tracks: unknown): number {
+function selectedAudio(
+  tracks: unknown,
+): { kind: 'internal'; index: number } | { kind: 'external'; url: string; index?: number } {
   if (!Array.isArray(tracks)) throw new Error('Unable to inspect the selected audio track.');
   for (const track of tracks) {
     if (
@@ -67,23 +76,42 @@ function selectedAudioIndex(tracks: unknown): number {
       track.selected !== true
     )
       continue;
-    if ('external' in track && track.external === true)
-      throw new Error(
-        'Select an audio track inside the video or stream before generating subtitles.',
-      );
+    if ('external' in track && track.external === true) {
+      if (
+        !('external-filename' in track) ||
+        typeof track['external-filename'] !== 'string' ||
+        !/^https?:\/\//i.test(track['external-filename'])
+      )
+        throw new Error(
+          'Select an audio track inside the video or an HTTP audio stream before generating subtitles.',
+        );
+      return {
+        kind: 'external',
+        url: track['external-filename'],
+        ...('ff-index' in track &&
+        typeof track['ff-index'] === 'number' &&
+        Number.isInteger(track['ff-index']) &&
+        track['ff-index'] >= 0
+          ? { index: track['ff-index'] }
+          : {}),
+      };
+    }
     if (
       'ff-index' in track &&
       typeof track['ff-index'] === 'number' &&
       Number.isInteger(track['ff-index']) &&
       track['ff-index'] >= 0
     )
-      return track['ff-index'];
+      return { kind: 'internal', index: track['ff-index'] };
     throw new Error('The selected audio track has no FFmpeg stream index.');
   }
   throw new Error('Select an audio track in mpv before generating subtitles.');
 }
 
 export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeDeps) {
+  const session = deps.session ?? createSubtitleGenerationSession(deps.getCacheDirectory());
+  let closed = false;
+  let finished: Promise<void> = Promise.resolve();
   let controller: AbortController | null = null;
   let progress: SubtitleGenerationProgress | null = null;
   let lastResult: SubtitleGenerationResult | null = null;
@@ -118,8 +146,13 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
   async function run(
     operation: (signal: AbortSignal) => Promise<SubtitleGenerationResult>,
   ): Promise<SubtitleGenerationResult> {
+    if (closed) return { ok: false, message: 'Subtitle generation session has closed.' };
     if (controller)
       return { ok: false, message: 'A subtitle generation or model download is already running.' };
+    let resolveFinished = () => {};
+    finished = new Promise<void>((resolve) => {
+      resolveFinished = resolve;
+    });
     const active = new AbortController();
     controller = active;
     progress = null;
@@ -137,6 +170,7 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
       };
     } finally {
       controller = null;
+      resolveFinished();
     }
     return lastResult;
   }
@@ -185,6 +219,13 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
 
   return {
     getStatus,
+    initialize: () => session.directory(),
+    async dispose(): Promise<void> {
+      closed = true;
+      controller?.abort();
+      await finished;
+      await session.dispose();
+    },
     async setVadEnabled(enabled: boolean): Promise<SubtitleGenerationStatus> {
       if (controller)
         throw new Error('Wait for the current operation before changing speech detection.');
@@ -246,13 +287,32 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
         if (!client || !mediaPath)
           throw new Error('Open a local media file or HTTP stream in mpv first.');
         const tracks = await client.requestProperty('track-list');
-        const audioStreamIndex = selectedAudioIndex(tracks);
-        const remote = /^https?:\/\//i.test(mediaPath)
+        const audio = selectedAudio(tracks);
+        const audioStreamIndex = audio.kind === 'internal' ? audio.index : undefined;
+        if (audio.kind === 'external' && !/^https?:\/\//i.test(mediaPath))
+          throw new Error('External audio generation requires an HTTP episode stream.');
+        const remote: SubtitleGenerationRemoteSource | undefined = /^https?:\/\//i.test(mediaPath)
           ? {
               httpHeaders: await resolveMpvHttpHeaders(client),
               cacheDirectory: deps.getCacheDirectory(),
+              sessionDirectory: await session.directory(),
+              ...(deps.getAlternativeSources
+                ? { alternatives: deps.getAlternativeSources(mediaPath) }
+                : {}),
             }
           : undefined;
+        if (audio.kind === 'external' && remote) {
+          const delay = await client.requestProperty('audio-delay');
+          if (typeof delay !== 'number' || !Number.isFinite(delay))
+            throw new Error('Unable to inspect the selected audio delay.');
+          const matched = remote.alternatives?.find((candidate) => candidate.url === audio.url);
+          remote.selectedAudio = {
+            url: audio.url,
+            audioStreamIndex: audio.index,
+            delaySeconds: delay,
+            httpHeaders: matched?.httpHeaders ?? remote.httpHeaders,
+          };
+        }
         const references = await readSubtitleGenerationReferences(tracks, (name) =>
           client.requestProperty(name),
         );

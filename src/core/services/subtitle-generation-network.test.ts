@@ -10,7 +10,7 @@ import { runSubtitleGenerationProcess } from './subtitle-generation-process';
 import { resolveSubtitleGenerationTools } from './subtitle-generation-tools';
 
 test(
-  'real FFmpeg extracts a header-protected HLS episode and cleans up downloaded audio',
+  'real FFmpeg extracts concurrent authenticated HLS downloads in audio order and cleans up',
   {
     skip: process.platform === 'win32' ? 'Requires a POSIX executable fixture.' : false,
   },
@@ -22,6 +22,8 @@ test(
     }
     const directory = await mkdtemp(path.join(tmpdir(), 'subminer-network-generation-'));
     const requests: string[] = [];
+    let activeSegments = 0;
+    let peakSegments = 0;
     const server = createServer(async (req, res) => {
       if (
         req.headers.referer !== 'https://anime.example/' ||
@@ -36,10 +38,19 @@ test(
         return;
       }
       requests.push(name);
+      const segment = name.endsWith('.ts');
+      if (segment) {
+        activeSegments += 1;
+        peakSegments = Math.max(peakSegments, activeSegments);
+      }
       try {
+        if (segment)
+          await new Promise((resolve) => setTimeout(resolve, name === 'segment0.ts' ? 80 : 20));
         res.end(await readFile(path.join(directory, name)));
       } catch {
         res.writeHead(404).end();
+      } finally {
+        if (segment) activeSegments -= 1;
       }
     });
     try {
@@ -51,7 +62,7 @@ test(
           '-f',
           'lavfi',
           '-i',
-          'sine=frequency=440:duration=3',
+          'aevalsrc=sin(2*PI*(220+220*floor(t))*t):d=6',
           '-c:a',
           'aac',
           '-f',
@@ -63,6 +74,28 @@ test(
           '-hls_segment_filename',
           path.join(directory, 'segment%d.ts'),
           path.join(directory, 'episode.m3u8'),
+        ],
+      });
+      const expectedWav = path.join(directory, 'expected.wav');
+      await runSubtitleGenerationProcess({
+        command: tools.ffmpeg.path,
+        args: [
+          '-v',
+          'error',
+          '-i',
+          path.join(directory, 'episode.m3u8'),
+          '-map',
+          '0:0',
+          '-vn',
+          '-af',
+          'asetpts=PTS-STARTPTS',
+          '-ac',
+          '1',
+          '-ar',
+          '16000',
+          '-c:a',
+          'pcm_s16le',
+          expectedWav,
         ],
       });
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -85,6 +118,7 @@ const wav = args[args.indexOf('-f') + 1];
 const bytes = fs.readFileSync(wav);
 assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
 assert.ok(bytes.length > 90000);
+assert.deepEqual(bytes, fs.readFileSync(${JSON.stringify(expectedWav)}));
 fs.writeFileSync(${JSON.stringify(path.join(directory, 'audio-path'))}, wav);
 fs.writeFileSync(args[args.indexOf('-of') + 1] + '.srt', '1\\n00:00:00,500 --> 00:00:01,500\\nこんにちは\\n');
 `,
@@ -104,18 +138,42 @@ fs.writeFileSync(args[args.indexOf('-of') + 1] + '.srt', '1\\n00:00:00,500 --> 0
         audioStreamIndex: 0,
         remote: {
           cacheDirectory,
+          sessionDirectory: cacheDirectory,
           httpHeaders: {
             headers: { Referer: 'https://anime.example/' },
             userAgent: 'SubMiner test',
           },
         },
       };
-      const output = await generateJapaneseSubtitles(input);
-      assert.match(await readFile(output, 'utf8'), /00:00:00,500 --> 00:00:01,500\nこんにちは/);
+      const failedWhisper = path.join(directory, 'whisper-failure');
+      await writeFile(failedWhisper, `#!${process.execPath}\nprocess.exit(1);\n`, { mode: 0o755 });
+      await assert.rejects(
+        generateJapaneseSubtitles({
+          ...input,
+          config: { ...input.config, whisperPath: failedWhisper },
+        }),
+        /status 1/,
+      );
       assert.ok(requests.includes('episode.m3u8'));
       assert.ok(requests.includes('segment2.ts'));
+      assert.ok(peakSegments >= 3, `Expected concurrent downloads, saw ${peakSegments}`);
+      assert.ok(peakSegments <= 4, `Download limit exceeded: ${peakSegments}`);
+      requests.length = 0;
+      const output = await generateJapaneseSubtitles(input);
+      assert.deepEqual(requests, [], 'A Whisper failure must not discard completed audio');
+      assert.match(await readFile(output, 'utf8'), /00:00:00,500 --> 00:00:01,500\nこんにちは/);
       const wav = await readFile(path.join(directory, 'audio-path'), 'utf8');
       await assert.rejects(readFile(wav), /ENOENT/);
+      requests.length = 0;
+      const progress: string[] = [];
+      const secondOutput = await generateJapaneseSubtitles({
+        ...input,
+        config: { ...input.config, managedModel: 'base' },
+        onProgress: (update) => progress.push(update.message ?? ''),
+      });
+      assert.notEqual(output, secondOutput);
+      assert.deepEqual(requests, []);
+      assert.ok(progress.includes('Reusing downloaded audio...'));
       await assert.rejects(
         generateJapaneseSubtitles({
           ...input,
@@ -123,7 +181,10 @@ fs.writeFileSync(args[args.indexOf('-of') + 1] + '.srt', '1\\n00:00:00,500 --> 0
         }),
         /403/,
       );
-      assert.deepEqual(await readdir(cacheDirectory), [path.basename(output)]);
+      assert.deepEqual(
+        (await readdir(cacheDirectory)).sort(),
+        ['audio', path.basename(output), path.basename(secondOutput)].sort(),
+      );
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) =>

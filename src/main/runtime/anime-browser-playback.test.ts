@@ -13,6 +13,44 @@ const request: AnimeBrowserPlayRequest = {
   episodeNumber: 1,
 };
 
+test('prepared episode retains its extraction alternatives under the routed playback URL', async () => {
+  const client = {
+    getVideoList: async () => [
+      {
+        videoUrl: 'http://127.0.0.1:1234/high.m3u8',
+        quality: '1080p',
+        audioTracks: [{ url: 'http://127.0.0.1:1234/ja.m3u8', lang: 'Japanese' }],
+      },
+      { videoUrl: 'http://127.0.0.1:1234/low.m3u8', quality: '360p' },
+    ],
+  } as unknown as AnimeBridgeClient;
+  const playback = createAnimeBrowserPlayback({
+    deps: {
+      sendMpvCommand: () => undefined,
+      ensureMpvConnected: async () => true,
+      log: () => undefined,
+    },
+    bridge: async () => ({ client, baseUrl: 'http://127.0.0.1:1234' }),
+    sourceFor: async () => ({}) as BridgeSource,
+    stripProxy: () => ({
+      origin: 'http://127.0.0.1:5678',
+      port: 5678,
+      close: async () => undefined,
+    }),
+  });
+  const result = await playback.prepareEpisode(request);
+  assert.ok(result.ok);
+  if (!result.ok) return;
+  assert.equal(result.playback.stream.url, 'http://127.0.0.1:5678/high.m3u8');
+  assert.deepEqual(
+    playback.getSubtitleGenerationSources(result.playback.stream.url).map((source) => source.url),
+    ['http://127.0.0.1:5678/ja.m3u8', 'http://127.0.0.1:5678/low.m3u8'],
+  );
+  assert.deepEqual(playback.getSubtitleGenerationSources('http://another/episode'), []);
+  await playback.dispose();
+  assert.deepEqual(playback.getSubtitleGenerationSources(result.playback.stream.url), []);
+});
+
 test('playback returns the established error when an extension has no playable stream', async () => {
   let mpvConnections = 0;
   const client = { getVideoList: async () => [] } as unknown as AnimeBridgeClient;
