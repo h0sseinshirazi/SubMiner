@@ -132,7 +132,7 @@ function verifyContents(archive, resources, platform, arch) {
     assert(!name.path.startsWith('minecard'), `Demo media shipped: ${name.path}`);
   }
   for (const ui of ['renderer', 'settings', 'syncui']) {
-    const css = asar.extractFile(archive, `dist/${ui}/style.css`).toString();
+    const css = asar.extractFile(archive, path.join('dist', ui, 'style.css')).toString();
     assert(css.includes('../fonts/MPLUS1[wght].ttf'), `Shared font missing from ${ui} CSS`);
   }
   return entries;
