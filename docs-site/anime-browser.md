@@ -394,6 +394,10 @@ download falls back to its URL so the episode still plays, the format is
 detected from the file's own content rather than its URL, and the directory is
 removed when the next episode starts or the app exits.
 
+### Generating Japanese subtitles
+
+While an episode is playing, press **Ctrl+Shift+G** to [generate Japanese subtitles](/subtitle-generation#generating-for-anime-streams) from its audio. SubMiner fetches the complete episode audio, transcribes it locally with whisper.cpp, and loads the resulting SRT if the same stream is still playing. Generated subtitles stay in the application cache. This requires a finite HTTP/HTTPS stream with an internal audio track; live streams and separately attached audio tracks are not supported.
+
 ### Series, season, and episode
 
 The episode's identity travels with it instead of being guessed back out of the

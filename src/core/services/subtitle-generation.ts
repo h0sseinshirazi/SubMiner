@@ -1,5 +1,6 @@
-import { access, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type {
@@ -11,6 +12,10 @@ import { runSubtitleGenerationProcess } from './subtitle-generation-process';
 import { publishSubtitleGenerationFile } from './subtitle-generation-files';
 import { formatTimestamp } from './subtitle-generation-srt';
 import { transcribeSubtitleDialogue } from './subtitle-generation-dialogue';
+import {
+  subtitleGenerationHttpArgs,
+  type SubtitleGenerationRemoteSource,
+} from './subtitle-generation-source';
 import {
   loadSubtitleGenerationReference,
   type SubtitleGenerationReference,
@@ -178,21 +183,35 @@ export async function generateJapaneseSubtitles(input: {
   modelDirectory: string;
   mediaPath: string;
   audioStreamIndex?: number;
+  remote?: SubtitleGenerationRemoteSource;
   references?: readonly SubtitleGenerationReference[];
   outputPath?: string;
   onProgress?: (progress: SubtitleGenerationProgress) => void;
   signal?: AbortSignal;
 }): Promise<string> {
   input.signal?.throwIfAborted();
-  if (/^[a-z][a-z\d+.-]*:\/\//i.test(input.mediaPath))
+  const isRemote = /^[a-z][a-z\d+.-]*:\/\//i.test(input.mediaPath);
+  if (isRemote && (!input.remote || !/^https?:\/\//i.test(input.mediaPath)))
+    throw new Error('Subtitle generation requires a local media file or a supported HTTP stream.');
+  if (!isRemote && input.remote) throw new Error('Expected an HTTP stream for remote generation.');
+  const mediaPath = isRemote ? new URL(input.mediaPath).href : path.resolve(input.mediaPath);
+  if (!isRemote && !(await stat(mediaPath)).isFile())
     throw new Error('Subtitle generation requires a local media file.');
-  const mediaPath = path.resolve(input.mediaPath);
-  if (!(await stat(mediaPath)).isFile())
-    throw new Error('Subtitle generation requires a local media file.');
+  // URLs may contain credentials or expiring tokens. Keep them out of cache filenames.
+  const destinationMediaPath = input.remote
+    ? path.join(
+        input.remote.cacheDirectory,
+        createHash('sha256').update(mediaPath).digest('hex').slice(0, 24),
+      )
+    : mediaPath;
+  if (input.remote) await mkdir(input.remote.cacheDirectory, { recursive: true });
   if (input.outputPath) await ensureAvailableOutput(path.resolve(input.outputPath));
   await ensureWritableDirectory(
-    input.outputPath ? path.dirname(path.resolve(input.outputPath)) : path.dirname(mediaPath),
+    input.outputPath
+      ? path.dirname(path.resolve(input.outputPath))
+      : path.dirname(destinationMediaPath),
   );
+  const httpArgs = input.remote ? subtitleGenerationHttpArgs(input.remote.httpHeaders) : [];
   const model = await resolveSubtitleGenerationModel(input.config, input.modelDirectory);
   if (model.kind === 'missing')
     throw new Error(
@@ -210,11 +229,16 @@ export async function generateJapaneseSubtitles(input: {
       'stream=index,codec_type,start_time,duration:stream_tags=language:format=start_time,duration',
       '-of',
       'json',
+      ...httpArgs,
       mediaPath,
     ],
     signal: input.signal,
   });
   const audio = parseAudioProbe(probe, input.audioStreamIndex);
+  if (isRemote && (!audio.duration || !Number.isFinite(audio.duration) || audio.duration <= 0))
+    throw new Error(
+      'Stream generation requires a finite episode duration. Live streams are not supported.',
+    );
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'subminer-whisper-'));
   try {
     const wavPath = path.join(temporaryDirectory, 'audio.wav');
@@ -227,10 +251,12 @@ export async function generateJapaneseSubtitles(input: {
         '-hide_banner',
         '-loglevel',
         'error',
+        ...httpArgs,
         '-i',
         mediaPath,
         '-map',
         `0:${audio.index}`,
+        ...(isRemote ? ['-t', String(audio.duration)] : []),
         '-vn',
         '-af',
         'asetpts=PTS-STARTPTS',
@@ -268,6 +294,7 @@ export async function generateJapaneseSubtitles(input: {
       ffmpegPath: tools.ffmpeg,
       directory: temporaryDirectory,
       audioOffset: audio.offset,
+      httpHeaders: input.remote?.httpHeaders,
       onProgress: input.onProgress,
       signal: input.signal,
     });
@@ -317,7 +344,7 @@ export async function generateJapaneseSubtitles(input: {
     input.onProgress?.({ stage: 'write', message: 'Saving Japanese subtitles...' });
     const contents = shiftSubtitleTimestamps(srt, audio.offset);
     const outputPath = await writeSubtitles({
-      mediaPath,
+      mediaPath: destinationMediaPath,
       outputPath: input.outputPath,
       contents,
       signal: input.signal,

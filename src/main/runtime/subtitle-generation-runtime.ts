@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { resolveMpvHttpHeaders } from '../../core/services/mpv-http-headers';
 import { readSubtitleGenerationReferences } from '../../core/services/subtitle-generation-reference';
 import { detectSubtitleGenerationAcceleration } from '../../core/services/subtitle-generation-acceleration';
 import { SUBTITLE_GENERATION_VAD_MODEL } from '../../shared/subtitle-generation-vad-model';
@@ -31,6 +32,7 @@ interface GenerationMpvClient {
 export interface SubtitleGenerationRuntimeDeps {
   getConfig: () => SubtitleGenerationConfig;
   getModelDirectory: () => string;
+  getCacheDirectory: () => string;
   getMpvClient: () => GenerationMpvClient | null;
   onProgress: (progress: SubtitleGenerationProgress) => void;
   generate?: typeof generateJapaneseSubtitles;
@@ -42,10 +44,12 @@ export interface SubtitleGenerationRuntimeDeps {
   resolveVadModel?: typeof resolveSubtitleGenerationVadModel;
 }
 
-async function currentLocalMedia(client: GenerationMpvClient | null): Promise<string | null> {
+async function currentMedia(client: GenerationMpvClient | null): Promise<string | null> {
   if (!client?.connected) return null;
   const media = await client.requestProperty('path');
-  if (typeof media !== 'string' || !media || /^[a-z][a-z\d+.-]*:\/\//i.test(media)) return null;
+  if (typeof media !== 'string' || !media) return null;
+  if (/^https?:\/\//i.test(media)) return media;
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(media)) return null;
   if (path.isAbsolute(media)) return path.normalize(media);
   const directory = await client.requestProperty('working-directory');
   return typeof directory === 'string' ? path.resolve(directory, media) : null;
@@ -64,7 +68,9 @@ function selectedAudioIndex(tracks: unknown): number {
     )
       continue;
     if ('external' in track && track.external === true)
-      throw new Error('Select an audio track inside the local video before generating subtitles.');
+      throw new Error(
+        'Select an audio track inside the video or stream before generating subtitles.',
+      );
     if (
       'ff-index' in track &&
       typeof track['ff-index'] === 'number' &&
@@ -155,7 +161,7 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
       config,
       deps.getModelDirectory(),
     );
-    const mediaPath = await currentLocalMedia(deps.getMpvClient()).catch(() => null);
+    const mediaPath = await currentMedia(deps.getMpvClient()).catch(() => null);
     return {
       model,
       vad: {
@@ -236,15 +242,21 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
           if (vad.kind === 'invalid') throw new Error(vad.message);
         }
         const client = deps.getMpvClient();
-        const mediaPath = await currentLocalMedia(client);
+        const mediaPath = await currentMedia(client);
         if (!client || !mediaPath)
-          throw new Error('Open a local video or audio file in mpv first.');
+          throw new Error('Open a local media file or HTTP stream in mpv first.');
         const tracks = await client.requestProperty('track-list');
         const audioStreamIndex = selectedAudioIndex(tracks);
+        const remote = /^https?:\/\//i.test(mediaPath)
+          ? {
+              httpHeaders: await resolveMpvHttpHeaders(client),
+              cacheDirectory: deps.getCacheDirectory(),
+            }
+          : undefined;
         const references = await readSubtitleGenerationReferences(tracks, (name) =>
           client.requestProperty(name),
         );
-        if ((await currentLocalMedia(client)) !== mediaPath)
+        if ((await currentMedia(client)) !== mediaPath)
           throw new Error('The current media changed. Start generation again.');
         signal.throwIfAborted();
         const outputPath = await (deps.generate ?? generateJapaneseSubtitles)({
@@ -252,13 +264,14 @@ export function createSubtitleGenerationRuntime(deps: SubtitleGenerationRuntimeD
           modelDirectory: deps.getModelDirectory(),
           mediaPath,
           audioStreamIndex,
+          remote,
           references,
           onProgress: report,
           signal,
         });
         // Saving succeeds even if playback changes or disconnects during the job.
         try {
-          const playingMedia = await currentLocalMedia(client);
+          const playingMedia = await currentMedia(client);
           if (!signal.aborted && deps.getMpvClient() === client && playingMedia === mediaPath) {
             const loaded = await client.request([
               'sub-add',

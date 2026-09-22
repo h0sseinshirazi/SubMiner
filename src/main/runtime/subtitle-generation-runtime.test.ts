@@ -21,6 +21,7 @@ function fixture(overrides: Partial<SubtitleGenerationRuntimeDeps> = {}) {
   const runtime = createSubtitleGenerationRuntime({
     getConfig: () => DEFAULT_SUBTITLE_GENERATION_CONFIG,
     getModelDirectory: () => '/models',
+    getCacheDirectory: () => '/cache/generated-subtitles',
     getMpvClient: () => client,
     onProgress: () => {},
     detectAcceleration: async () => ({ kind: 'unavailable' }),
@@ -70,6 +71,67 @@ test('generation preserves the output without attaching it to a different video'
   assert.equal(result.ok, true);
   assert.match(result.message, /Playback changed/);
   assert.deepEqual(subject.commands, []);
+});
+
+test('stream generation snapshots mpv headers and saves in the cache before loading', async () => {
+  const url = 'http://127.0.0.1:7777/proxy/episode.m3u8';
+  const subject = fixture({
+    generate: async (input) => {
+      assert.equal(input.mediaPath, url);
+      assert.equal(input.audioStreamIndex, 3);
+      assert.deepEqual(input.remote, {
+        cacheDirectory: '/cache/generated-subtitles',
+        httpHeaders: {
+          headers: { Referer: 'https://anime.example/', 'X-Stream': 'episode' },
+          userAgent: 'Anime Player',
+        },
+      });
+      return '/cache/generated-subtitles/episode.ja.generated.srt';
+    },
+  });
+  const request = subject.client.requestProperty;
+  subject.client.requestProperty = async (name) => {
+    if (name === 'path') return url;
+    if (name === 'file-local-options/http-header-fields')
+      return ['Referer: https://anime.example/', 'X-Stream: episode'];
+    if (name === 'file-local-options/user-agent') return 'Anime Player';
+    return request(name);
+  };
+  assert.equal((await subject.runtime.getStatus()).mediaPath, url);
+  assert.equal((await subject.runtime.start()).ok, true);
+  assert.deepEqual(subject.commands[0], [
+    'sub-add',
+    '/cache/generated-subtitles/episode.ja.generated.srt',
+    'select',
+    'Generated Japanese',
+    'ja',
+  ]);
+});
+
+test('stream changes during header capture stop generation; changes during transcription keep the saved result', async () => {
+  for (const duringCapture of [true, false]) {
+    let current = 'https://anime.example/episode.m3u8';
+    const next = 'https://anime.example/next.m3u8';
+    let generated = false;
+    const subject = fixture({
+      generate: async () => {
+        generated = true;
+        current = next;
+        return '/cache/generated.srt';
+      },
+    });
+    const request = subject.client.requestProperty;
+    subject.client.requestProperty = async (name) => {
+      if (name === 'path') return current;
+      if (duringCapture && name === 'file-local-options/http-header-fields') current = next;
+      return request(name);
+    };
+    const result = await subject.runtime.start();
+    assert.equal(result.ok, !duringCapture);
+    assert.equal(generated, !duringCapture);
+    assert.match(result.message, /changed/);
+    assert.deepEqual(subject.commands, []);
+  }
 });
 
 test('generation selects loaded dialogue references and excludes the signs track', async () => {

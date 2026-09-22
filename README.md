@@ -95,8 +95,8 @@ Browse sibling episode files and the active mpv queue in one overlay modal. Open
     <td>Search and download Japanese subtitles</td>
   </tr>
   <tr>
-    <td><b>Local Subtitle Generation</b></td>
-    <td>Generate Japanese subtitles from local audio in a standalone modal (<code>Ctrl+Shift+G</code>), the sidebar button, or launcher, with progress and optional managed model downloads. Requires whisper.cpp and FFmpeg. Optional Silero speech detection prioritizes dialogue in separately timed passages. <a href="https://docs.subminer.moe/main/subtitle-generation">Setup guide</a></td>
+    <td><b>Japanese Subtitle Generation</b></td>
+    <td>Generate Japanese subtitles from local files or finite anime streams in a standalone modal (<code>Ctrl+Shift+G</code>) or the sidebar button. The launcher supports local files. Transcription runs locally with whisper.cpp and FFmpeg, with progress and optional managed model downloads. Stream subtitles are saved in the application cache. Optional Silero speech detection prioritizes dialogue in separately timed passages. <a href="https://docs.subminer.moe/main/subtitle-generation">Setup guide</a></td>
   </tr>
   <tr>
     <td><b>TsukiHime</b></td>
@@ -277,7 +277,7 @@ SubMiner builds on the work of these open-source projects:
 | [Aniyomi](https://github.com/aniyomiorg/aniyomi)                                            | Anime extension API and data model the anime browser targets                 |
 | [asbplayer](https://github.com/killergerbah/asbplayer)                                      | Inspiration for subtitle sidebar and logic for YouTube subtitle parsing      |
 | [Bee's Character Dictionary](https://github.com/bee-san/Japanese_Character_Name_Dictionary) | Character name recognition in subtitles                                      |
-| [Bun](https://github.com/oven-sh/bun)                                                       | Bundled runtime for the `subminer` command-line launcher                |
+| [Bun](https://github.com/oven-sh/bun)                                                       | Bundled runtime for the `subminer` command-line launcher                     |
 | [GameSentenceMiner](https://github.com/bpwhelan/GameSentenceMiner)                          | Inspiration for Electron overlay with Yomitan integration                    |
 | [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim)                          | Jellyfin integration                                                         |
 | [Jimaku.cc](https://jimaku.cc)                                                              | Japanese subtitle search and downloads                                       |

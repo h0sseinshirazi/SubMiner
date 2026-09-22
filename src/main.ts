@@ -6887,6 +6887,7 @@ function setOverlayVisible(visible: boolean): void {
 registerIpcRuntimeHandlers();
 const subtitleGenerationRuntime = createSubtitleGenerationRuntime({
   getConfig: () => configService.getConfig().subtitleGeneration,
+  getCacheDirectory: () => path.join(USER_DATA_PATH, 'cache', 'generated-subtitles'),
   getModelDirectory: () =>
     path.join(path.dirname(configService.getConfigPath()), 'models', 'whisper'),
   getMpvClient: () => appState.mpvClient,
