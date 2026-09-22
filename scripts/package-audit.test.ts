@@ -134,10 +134,12 @@ test('archive inventory handles native files without counting them twice on disk
     mkdirSync(output);
     writeFileSync(path.join(input, 'main.js'), 'hello');
     writeFileSync(path.join(input, 'native.node'), 'native');
+    mkdirSync(path.join(input, 'dist', 'ai'), { recursive: true });
+    writeFileSync(path.join(input, 'dist', 'ai', 'client.js'), 'nested');
     const archive = path.join(output, 'app.asar');
     await createPackageFromStreams(
       archive,
-      ['main.js', 'native.node'].map((name) => ({
+      ['main.js', 'native.node', 'dist/ai/client.js'].map((name) => ({
         path: name,
         type: 'file',
         unpacked: name.endsWith('.node'),
@@ -148,6 +150,7 @@ test('archive inventory handles native files without counting them twice on disk
     assert.deepEqual(listAppFiles(archive), [
       { path: 'main.js', bytes: 5 },
       { path: 'native.node', bytes: 6 },
+      { path: 'dist/ai/client.js', bytes: 6 },
     ]);
     assert.equal(
       listFiles(output).reduce((sum: number, entry: { bytes: number }) => sum + entry.bytes, 0),

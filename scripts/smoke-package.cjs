@@ -1,6 +1,7 @@
 // Run with the pinned Electron runtime against a finished app's resources folder.
 const { app, BrowserWindow, session } = require('electron');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const assert = require('node:assert/strict');
@@ -20,6 +21,39 @@ const timeout = setTimeout(() => {
   console.error('Package smoke timed out');
   app.exit(1);
 }, 60_000);
+
+const STATIC_TYPES = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.json': 'application/json',
+};
+
+// The stats dashboard is served by the stats HTTP server in the app, so load it
+// over loopback HTTP from the packaged stats/dist and treat missing static
+// assets as failures. API routes are not part of this smoke and may 404.
+function serveStatsDist(root, failedRequests) {
+  const server = http.createServer((req, res) => {
+    const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+    const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
+    try {
+      const body = fs.readFileSync(path.join(root, relative));
+      res.writeHead(200, {
+        'Content-Type': STATIC_TYPES[path.extname(relative)] ?? 'application/octet-stream',
+      });
+      res.end(body);
+    } catch {
+      if (!pathname.startsWith('/api/')) failedRequests.push(`${req.url}: missing static asset`);
+      res.writeHead(404).end();
+    }
+  });
+  server.listen(0, '127.0.0.1');
+  return server;
+}
 
 async function smoke() {
   await app.whenReady();
@@ -50,10 +84,17 @@ async function smoke() {
   );
   assert(extension.id, 'Yomitan extension failed to load');
   const failedRequests = [];
-  session.defaultSession.webRequest.onErrorOccurred({ urls: ['file://*/*'] }, (details) => {
-    if (details.error !== 'net::ERR_ABORTED')
-      failedRequests.push(`${details.url}: ${details.error}`);
-  });
+  session.defaultSession.webRequest.onErrorOccurred(
+    { urls: ['file://*/*', 'http://127.0.0.1/*'] },
+    (details) => {
+      // Chromium probes the cache before fetching @font-face fonts; an uncached
+      // font reports ERR_CACHE_MISS and is then fetched normally.
+      if (!['net::ERR_ABORTED', 'net::ERR_CACHE_MISS'].includes(details.error))
+        failedRequests.push(`${details.url}: ${details.error}`);
+    },
+  );
+  const statsServer = serveStatsDist(path.join(archive, 'stats', 'dist'), failedRequests);
+  await once(statsServer, 'listening');
   for (const ui of ['renderer', 'settings', 'syncui', 'stats']) {
     const win = new BrowserWindow({
       show: false,
@@ -63,10 +104,12 @@ async function smoke() {
       },
     });
     try {
-      await win.loadFile(
-        path.join(archive, ui === 'stats' ? 'stats/dist/index.html' : `dist/${ui}/index.html`),
-      );
-      if (ui !== 'stats') {
+      if (ui === 'stats') {
+        await win.loadURL(`http://127.0.0.1:${statsServer.address().port}/`);
+        // Let in-flight font requests settle before the window goes away.
+        await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
+      } else {
+        await win.loadFile(path.join(archive, `dist/${ui}/index.html`));
         const loaded = await win.webContents.executeJavaScript(
           `document.fonts.load('400 16px "M PLUS 1"', '日本語').then(fonts => fonts.length > 0 && fonts.every(font => font.status === 'loaded'))`,
         );
@@ -76,6 +119,7 @@ async function smoke() {
       win.destroy();
     }
   }
+  statsServer.close();
   assert.deepEqual(failedRequests, [], 'Packaged UI resources failed to load');
   console.log(
     'Package smoke passed: SQLite, platform FFI, texthooker, Yomitan loading, UI pages, shared Japanese font.',

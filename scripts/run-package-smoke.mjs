@@ -14,7 +14,12 @@ delete env.ELECTRON_RUN_AS_NODE;
 try {
   const result = spawnSync(
     require('electron'),
-    [fileURLToPath(new URL('./smoke-package.cjs', import.meta.url)), path.resolve(resources)],
+    [
+      fileURLToPath(new URL('./smoke-package.cjs', import.meta.url)),
+      path.resolve(resources),
+      // CI runners lack a setuid chrome-sandbox; this harness never loads remote content.
+      ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
+    ],
     { env, stdio: 'inherit', timeout: 75_000 },
   );
   if (result.error) throw result.error;

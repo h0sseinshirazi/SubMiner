@@ -51,10 +51,13 @@ function listFiles(root, prefix = '') {
   });
 }
 
+// asar resolves lookups with the platform separator, so stat with the listed
+// native path and only normalize the reported name.
 function listAppFiles(archive) {
   return asar.listPackage(archive).flatMap((entry) => {
-    const name = entry.replaceAll('\\', '/').replace(/^\//, '');
-    const stat = asar.statFile(archive, name);
+    const native = entry.replace(/^[\\/]/, '');
+    const stat = asar.statFile(archive, native);
+    const name = native.replaceAll('\\', '/');
     return 'size' in stat ? [{ path: name, bytes: stat.size }] : [];
   });
 }
