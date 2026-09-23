@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 test('Hachidori staging configures Electron without changing the fork source', async () => {
-  const files = ['overlay-mode.js', 'manifest.json'];
+  const files = ['overlay-mode.js', 'setup-state.js', 'manifest.json'];
   const source = (file: string) =>
     new URL(`../vendor/hachidori/extension/${file}`, import.meta.url);
   const before = files.map((file) => readFileSync(source(file), 'utf8'));
@@ -24,6 +24,14 @@ test('Hachidori staging configures Electron without changing the fork source', a
   const original = await import(source('overlay-mode.js').href);
   assert.equal(original.OVERLAY_MODE, false);
   assert.equal(original.HOST_CAPABILITIES.customJavaScript, true);
+  // SubMiner mines media from mpv, not the overlay viewport, so the lookup
+  // highlight stays on for a first install.
+  const stagedSetup = await import(
+    new URL('../build/hachidori/setup-state.js', import.meta.url).href
+  );
+  assert.equal(stagedSetup.OVERLAY_MODE_OPTIONS.sourceHighlightEnabled, true);
+  const originalSetup = await import(source('setup-state.js').href);
+  assert.equal(originalSetup.OVERLAY_MODE_OPTIONS.sourceHighlightEnabled, false);
   const manifest = JSON.parse(
     readFileSync(new URL('../build/hachidori/manifest.json', import.meta.url), 'utf8'),
   );

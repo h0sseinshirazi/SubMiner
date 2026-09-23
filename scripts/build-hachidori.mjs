@@ -31,17 +31,31 @@ fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 fs.cpSync(extension, output, { recursive: true });
 // Host configuration belongs in the staged copy, leaving the fork usable in Chrome.
-const overlayPath = path.join(output, 'overlay-mode.js');
-let overlay = fs.readFileSync(overlayPath, 'utf8');
-for (const [original, replacement] of [
-  ['export const OVERLAY_MODE = false;', 'export const OVERLAY_MODE = true;'],
-  ['customJavaScript: !IS_FIREFOX,', 'customJavaScript: false,'],
-]) {
-  if (!overlay.includes(original))
-    throw new Error(`Hachidori host configuration changed upstream: ${original}`);
-  overlay = overlay.replace(original, replacement);
+const hostConfiguration = {
+  'overlay-mode.js': [
+    ['export const OVERLAY_MODE = false;', 'export const OVERLAY_MODE = true;'],
+    ['customJavaScript: !IS_FIREFOX,', 'customJavaScript: false,'],
+  ],
+  // Overlay hosts seed the lookup highlight off because their Anki screenshot is
+  // the see-through viewport. SubMiner captures media from mpv, and without the
+  // highlight the sidebar shows nothing for the word being looked up.
+  'setup-state.js': [
+    [
+      'lookupMode: "hover",\n  sourceHighlightEnabled: false,',
+      'lookupMode: "hover",\n  sourceHighlightEnabled: true,',
+    ],
+  ],
+};
+for (const [file, replacements] of Object.entries(hostConfiguration)) {
+  const filePath = path.join(output, file);
+  let text = fs.readFileSync(filePath, 'utf8');
+  for (const [original, replacement] of replacements) {
+    if (!text.includes(original))
+      throw new Error(`Hachidori host configuration changed upstream: ${original}`);
+    text = text.replace(original, replacement);
+  }
+  fs.writeFileSync(filePath, text);
 }
-fs.writeFileSync(overlayPath, overlay);
 manifest.permissions = manifest.permissions.filter((permission) => permission !== 'userScripts');
 fs.writeFileSync(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 for (const file of ['LICENSE', 'SOURCE.json', 'README.md']) {
