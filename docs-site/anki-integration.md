@@ -202,6 +202,8 @@ Overlay and stats-dashboard mining use the same `media.maxMediaDuration` limit. 
 
 Set `media.reviewTiming` to `true` to pause playback and check the clip before its media is generated. It applies to word, sentence, and audio cards.
 
+Playback stays paused while the review is open, even if the dictionary popup or subtitle hover that paused it goes away. When the review closes, playback resumes if it was playing before the review or if the popup closed in the meantime. A dictionary popup that is still open keeps playback paused.
+
 The review opens on the subtitle range plus your configured audio padding. Subtitles usually hang around after the dialogue has stopped, so once the waveform loads, an untouched clip end pulls back to just after the last speech in the line. The Line end rail still marks the original subtitle timing, Reset puts it back, and a line whose speech runs right through its end is left alone.
 
 **Adjusting the clip.** Drag either edge to trim, drag the middle to slide the whole clip without changing its length, or click anywhere on the waveform to snap the nearer edge there. A focused edge also moves with the arrow keys: 100 ms per press, or 500 ms with Shift. The 100 ms buttons do the same thing. Earlier and Later each reveal two more seconds of timeline without moving the selection.

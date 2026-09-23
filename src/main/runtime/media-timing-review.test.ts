@@ -98,6 +98,7 @@ async function startActiveMediaTimingReview(
   } = {},
 ) {
   const previewCalls: Array<[number, number]> = [];
+  const commands: Array<Array<string | number>> = [];
   let publishPayload!: (payload: MediaTimingReviewOpenPayload) => void;
   const openedPayload = new Promise<MediaTimingReviewOpenPayload>((resolve) => {
     publishPayload = resolve;
@@ -107,7 +108,7 @@ async function startActiveMediaTimingReview(
       connected: true,
       currentVideoPath: '/video/show.mkv',
       requestProperty: async (name) => (name === 'duration' ? 100 : name === 'pause' ? true : null),
-      send: () => undefined,
+      send: ({ command }) => commands.push(command),
     }),
     getCurrentMediaPath: () => '/video/show.mkv',
     getMpvExecutablePath: () => 'mpv',
@@ -138,7 +139,7 @@ async function startActiveMediaTimingReview(
     maxMediaDuration: options.maxMediaDuration ?? 30,
   });
 
-  return { runtime, payload: await openedPayload, pendingDecision, previewCalls };
+  return { runtime, payload: await openedPayload, pendingDecision, previewCalls, commands };
 }
 
 test('media timing review pauses playback, resolves exact timing, and restores playing state', async () => {
@@ -640,6 +641,31 @@ test('collectMediaTimingContextLines falls back to played history when no cues a
 
   assert.deepEqual(context.previous, [{ text: '前の行', startTime: 1, endTime: 2 }]);
   assert.deepEqual(context.next, []);
+});
+
+test('media timing review keeps an already-paused video paused when nothing asks to resume', async () => {
+  const { runtime, payload, pendingDecision, commands } = await startActiveMediaTimingReview();
+
+  runtime.resolveReview({ reviewId: payload.reviewId, decision: { action: 'use-original' } });
+  await pendingDecision;
+
+  assert.deepEqual(commands, [['set_property', 'pause', 'yes']]);
+});
+
+test('media timing review holds overlay resume requests until the review closes', async () => {
+  const { runtime, payload, pendingDecision, commands } = await startActiveMediaTimingReview();
+
+  assert.equal(runtime.deferPlaybackResume(), true);
+  assert.deepEqual(commands, [['set_property', 'pause', 'yes']]);
+
+  runtime.resolveReview({ reviewId: payload.reviewId, decision: { action: 'use-original' } });
+  await pendingDecision;
+
+  assert.deepEqual(commands, [
+    ['set_property', 'pause', 'yes'],
+    ['set_property', 'pause', 'no'],
+  ]);
+  assert.equal(runtime.deferPlaybackResume(), false);
 });
 
 test('media timing review watchdog falls back when the renderer stops responding', async () => {

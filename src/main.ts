@@ -2051,7 +2051,20 @@ function isExplicitMpvSeekCommand(command: readonly (string | number)[]): boolea
   return command[0] === 'seek' || command[0] === 'sub-seek';
 }
 
+function isMpvResumeCommand(command: readonly (string | number)[]): boolean {
+  return (
+    (command[0] === 'set_property' || command[0] === 'set') &&
+    command[1] === 'pause' &&
+    command[2] === 'no'
+  );
+}
+
 function sendRendererMpvCommand(rawCommand: (string | number)[]): void {
+  // Overlay auto-pause releases (popup closed, hover left) must not resume playback
+  // behind an open timing review; the review applies them when it closes.
+  if (isMpvResumeCommand(rawCommand) && mediaTimingReviewRuntime.deferPlaybackResume()) {
+    return;
+  }
   const command =
     resolveSanitizedSubtitleSeekCommand(
       rawCommand,
