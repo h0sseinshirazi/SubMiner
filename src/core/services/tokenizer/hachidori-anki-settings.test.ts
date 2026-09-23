@@ -43,7 +43,7 @@ async function harness(
       if (type !== 'hd_options_write' || target !== 'hoshidicts-worker') throw Error('Unexpected request');
       if (race) {
         race = false;
-        options.anki.templates[0].deck = options.anki.deck = 'User edit';
+        options.anki.templates[0].tags = options.anki.tags = ['User edit'];
         options.revision++;
       }
       if (request.baseRevision !== options.revision) throw Error('conflict');
@@ -101,7 +101,9 @@ test('fresh Hachidori settings inherit deck, tags, a unique model and configured
   assert.equal(await h.run('writes'), 1);
 });
 
-test('preserves custom templates, tags, intentional blank fields and additional templates', async () => {
+// SubMiner's new-card polling only watches ankiConnect.deck, so the first
+// template's deck follows it the way Yomitan's term card deck does.
+test('moves the first template to the SubMiner deck and preserves the rest of custom templates', async () => {
   const h = await harness({
     templates: [
       {
@@ -118,9 +120,13 @@ test('preserves custom templates, tags, intentional blank fields and additional 
       { id: 'second', name: 'Second', deck: 'Other', model: 'Other', tags: [] },
     ],
   });
-  const before = await h.run('options.anki.templates');
+  const before = (await h.run('options.anki.templates')) as Array<Record<string, unknown>>;
   await h.sync();
-  assert.deepEqual(await h.run('options.anki.templates'), before);
+  assert.deepEqual(await h.run('options.anki.templates'), [
+    { ...before[0], deck: 'Mining' },
+    ...before.slice(1),
+  ]);
+  assert.equal(await h.run('options.anki.deck'), 'Mining');
 });
 
 test('leaves an ambiguous model unset and retries discovery after Anki reconnects', async () => {
@@ -154,7 +160,7 @@ test('re-reads concurrent settings edits before retrying its revisioned write', 
   const h = await harness();
   await h.run('race = true');
   await h.sync();
-  assert.equal(await h.run('options.anki.deck'), 'User edit');
+  assert.deepEqual(await h.run('options.anki.tags'), ['User edit']);
   assert.equal(await h.run('options.anki.model'), 'Japanese');
 });
 

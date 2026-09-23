@@ -46,9 +46,9 @@ export const HACHIDORI_ANKI_SETTINGS_SCRIPT = String.raw`
         const first = anki.templates[0];
         if (!first) return { updated: false, matched: false, reason: 'no-templates' };
         let template = { ...first, fields: { ...first.fields } };
-        const pristine = !first.model && first.fieldTemplates === null
-          && Object.values(first.fields).every(value => !value);
-        if (deck && (!first.deck || (pristine && first.deck === 'Default'))) template.deck = deck;
+        // SubMiner's new-card polling only watches its configured deck, so the
+        // first template follows it like Yomitan's term card deck.
+        if (deck) template.deck = deck;
         if (hints?.tags && JSON.stringify(first.tags) === JSON.stringify(['hachidori'])) {
           template.tags = [...hints.tags];
         }
