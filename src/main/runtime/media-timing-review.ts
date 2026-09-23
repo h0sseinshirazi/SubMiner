@@ -313,6 +313,15 @@ export function createMediaTimingReviewRuntime(deps: MediaTimingReviewRuntimeDep
     return true;
   }
 
+  /**
+   * The overlay asked to pause while a review holds playback, so closing the review must
+   * not resume it: drops both a held overlay resume and the review's own restore.
+   */
+  function cancelPlaybackResume(): void {
+    resumeDeferred = false;
+    if (active) active.restorePlayback = false;
+  }
+
   function ensureWindow(
     review: ActiveReview,
     range: RemoteMediaWindowRange,
@@ -782,6 +791,7 @@ export function createMediaTimingReviewRuntime(deps: MediaTimingReviewRuntimeDep
     stopPreview,
     resolveReview,
     deferPlaybackResume,
+    cancelPlaybackResume,
     dispose,
   };
 }

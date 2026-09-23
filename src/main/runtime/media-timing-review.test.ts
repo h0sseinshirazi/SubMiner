@@ -95,6 +95,7 @@ async function startActiveMediaTimingReview(
     decisionTimeoutMs?: number;
     generateWaveform?: () => Promise<number[]>;
     play?: () => Promise<void>;
+    paused?: boolean;
   } = {},
 ) {
   const previewCalls: Array<[number, number]> = [];
@@ -107,7 +108,8 @@ async function startActiveMediaTimingReview(
     getMpvClient: () => ({
       connected: true,
       currentVideoPath: '/video/show.mkv',
-      requestProperty: async (name) => (name === 'duration' ? 100 : name === 'pause' ? true : null),
+      requestProperty: async (name) =>
+        name === 'duration' ? 100 : name === 'pause' ? (options.paused ?? true) : null,
       send: ({ command }) => commands.push(command),
     }),
     getCurrentMediaPath: () => '/video/show.mkv',
@@ -667,6 +669,22 @@ test('media timing review holds overlay resume requests until the review closes'
   ]);
   assert.equal(runtime.deferPlaybackResume(), false);
 });
+
+for (const paused of [true, false]) {
+  test(`media timing review stays paused after an overlay pause request (paused before: ${paused})`, async () => {
+    const { runtime, payload, pendingDecision, commands } = await startActiveMediaTimingReview({
+      paused,
+    });
+
+    assert.equal(runtime.deferPlaybackResume(), true);
+    runtime.cancelPlaybackResume();
+
+    runtime.resolveReview({ reviewId: payload.reviewId, decision: { action: 'use-original' } });
+    await pendingDecision;
+
+    assert.deepEqual(commands, [['set_property', 'pause', 'yes']]);
+  });
+}
 
 test('media timing review watchdog falls back when the renderer stops responding', async () => {
   const { pendingDecision } = await startActiveMediaTimingReview({ decisionTimeoutMs: 0 });

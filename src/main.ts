@@ -2051,19 +2051,23 @@ function isExplicitMpvSeekCommand(command: readonly (string | number)[]): boolea
   return command[0] === 'seek' || command[0] === 'sub-seek';
 }
 
-function isMpvResumeCommand(command: readonly (string | number)[]): boolean {
-  return (
-    (command[0] === 'set_property' || command[0] === 'set') &&
-    command[1] === 'pause' &&
-    command[2] === 'no'
-  );
+function getMpvPauseCommandValue(command: readonly (string | number)[]): 'yes' | 'no' | null {
+  if ((command[0] !== 'set_property' && command[0] !== 'set') || command[1] !== 'pause') {
+    return null;
+  }
+  return command[2] === 'yes' || command[2] === 'no' ? command[2] : null;
 }
 
 function sendRendererMpvCommand(rawCommand: (string | number)[]): void {
   // Overlay auto-pause releases (popup closed, hover left) must not resume playback
-  // behind an open timing review; the review applies them when it closes.
-  if (isMpvResumeCommand(rawCommand) && mediaTimingReviewRuntime.deferPlaybackResume()) {
+  // behind an open timing review; the review applies them when it closes. A pause
+  // request during the review keeps playback paused after it closes.
+  const pauseValue = getMpvPauseCommandValue(rawCommand);
+  if (pauseValue === 'no' && mediaTimingReviewRuntime.deferPlaybackResume()) {
     return;
+  }
+  if (pauseValue === 'yes') {
+    mediaTimingReviewRuntime.cancelPlaybackResume();
   }
   const command =
     resolveSanitizedSubtitleSeekCommand(
