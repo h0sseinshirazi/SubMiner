@@ -12,7 +12,7 @@ This is the recommended way to use Jellyfin with SubMiner. A terminal-only optio
 
 ## Requirements
 
-- A Jellyfin server plus your username and password
+- A Jellyfin server plus your username and password (Jellyfin 12, which disables legacy authorization by default, is supported)
 - SubMiner installed and running (see [Installation](/installation))
 - On Linux, the session token is stored with `gnome-libsecret` by default
 
@@ -50,6 +50,7 @@ From then on, pause / resume / seek / stop and audio or subtitle track changes y
 ## What happens during playback
 
 - **mpv launches automatically.** If mpv isn't already running when you cast, SubMiner starts it with SubMiner defaults and the bundled mpv plugin, so keybindings work right away.
+- **Windows respects your mpv settings.** Casting checks `mpv.executablePath`, then `SUBMINER_MPV_PATH`, then `PATH`. An invalid configured path prevents automatic startup.
 - **The overlay is managed by SubMiner,** so your configured `subtitleStyle` controls how subtitles look. Use the [overlay-toggle shortcut](/shortcuts) to hide it for a session.
 - **Resume works.** If Jellyfin has a saved position for the item, SubMiner seeks there on load.
 - **Titles and credentials stay separate.** AniList, character dictionaries, Anki source fields, and Discord presence use media titles, never authenticated stream URLs. If a usable title is unavailable, lookups are skipped and source fields show an unknown-media label. Stats identifies Jellyfin videos by server and item ID without the stream URL or API key.

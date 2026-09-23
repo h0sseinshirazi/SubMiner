@@ -1,4 +1,4 @@
 type: docs
 area: stats
 
-- Documented provider reassignment, merge compatibility, and TMDB credential command caching and retry cooldown.
+- Documented TMDB linking, provider reassignment, merge compatibility, and credential command caching.

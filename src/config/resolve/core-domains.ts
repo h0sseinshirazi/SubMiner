@@ -33,6 +33,25 @@ export function applyCoreDomainConfig(context: ResolveContext): void {
     );
   }
 
+  if (isObject(src.subtitleSelection)) {
+    const enabled = asBoolean(src.subtitleSelection.enabled);
+    if (enabled !== undefined) resolved.subtitleSelection.enabled = enabled;
+    else if (src.subtitleSelection.enabled !== undefined)
+      warn(
+        'subtitleSelection.enabled',
+        src.subtitleSelection.enabled,
+        resolved.subtitleSelection.enabled,
+        'Expected boolean.',
+      );
+  } else if (src.subtitleSelection !== undefined) {
+    warn(
+      'subtitleSelection',
+      src.subtitleSelection,
+      resolved.subtitleSelection,
+      'Expected object.',
+    );
+  }
+
   if (isObject(src.texthooker)) {
     const launchAtStartup = asBoolean(src.texthooker.launchAtStartup);
     if (launchAtStartup !== undefined) {
@@ -264,6 +283,7 @@ export function applyCoreDomainConfig(context: ResolveContext): void {
       'openRuntimeOptions',
       'openJimaku',
       'openTsukihime',
+      'openSubtitleSelection',
       'openSubtitleGeneration',
       'openSessionHelp',
       'openControllerSelect',

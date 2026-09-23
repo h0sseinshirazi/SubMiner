@@ -1,11 +1,11 @@
 // Run with the pinned Electron runtime against a finished app's resources folder.
 const { app, BrowserWindow, session } = require('electron');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
-const http = require('node:http');
 
 const resources = path.resolve(process.argv[2]);
 const archive = path.join(resources, 'app.asar');
@@ -55,10 +55,15 @@ async function smoke() {
     .extensions.loadExtension(path.join(resources, 'hachidori'), { allowFileAccess: true });
   assert(hachidori.id, 'Hachidori extension failed to load');
   const failedRequests = [];
-  session.defaultSession.webRequest.onErrorOccurred({ urls: ['file://*/*'] }, (details) => {
-    if (details.error !== 'net::ERR_ABORTED')
-      failedRequests.push(`${details.url}: ${details.error}`);
-  });
+  session.defaultSession.webRequest.onErrorOccurred(
+    { urls: ['file://*/*', 'http://127.0.0.1/*'] },
+    (details) => {
+      // Chromium probes the cache before fetching @font-face fonts; an uncached
+      // font reports ERR_CACHE_MISS and is then fetched normally.
+      if (!['net::ERR_ABORTED', 'net::ERR_CACHE_MISS'].includes(details.error))
+        failedRequests.push(`${details.url}: ${details.error}`);
+    },
+  );
   for (const ui of ['renderer', 'settings', 'syncui']) {
     const win = new BrowserWindow({
       show: false,
@@ -99,6 +104,8 @@ async function smoke() {
       if (details.statusCode >= 400) failedRequests.push(`${details.url}: ${details.statusCode}`);
     });
     await statsWindow.loadURL(url);
+    // Let in-flight font requests settle before the window goes away.
+    await statsWindow.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
     for (const endpoint of ['overview', 'sessions']) {
       const response = await fetch(`${url}/api/stats/${endpoint}`);
       assert.equal(response.status, 200, `Stats ${endpoint} request failed`);

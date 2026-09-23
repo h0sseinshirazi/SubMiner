@@ -1,6 +1,4 @@
 type: changed
-breaking: true
 area: stats
 
-- Reject requests from untrusted browser origins and hosts before stats data, media, or Anki operations run, and require JSON for mutation bodies.
-- Load the in-app stats overlay from the local server so it uses the same origin protection as the browser dashboard.
+- The stats server now rejects requests from non-loopback hosts and browser origins and requires `application/json` for mutation bodies. The in-app stats overlay loads from the local server so it shares the same protection. Reverse-proxied or Tailscale Serve dashboards are unsupported; scripts that POST must set a JSON content type.
