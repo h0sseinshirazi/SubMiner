@@ -112,7 +112,11 @@ export const HACHIDORI_ANKI_SETTINGS_SCRIPT = String.raw`
           }, 'hoshidicts-worker');
           return { updated: changed, matched: !pending, pending };
         } catch (error) {
-          if (attempt > 0) throw error;
+          if (attempt > 0) {
+            // The server was never written, so the marker must not claim it.
+            await globalThis.__subminerSetAnkiProxyUrl(previousProxy);
+            throw error;
+          }
           // Re-read after a concurrent settings save before filling anything.
         }
       }

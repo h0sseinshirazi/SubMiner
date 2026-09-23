@@ -36,11 +36,12 @@ async function harness(
   vm.runInContext(
     `
     let options = { ...HDReaderOptions.normaliseOptions({ anki: __initialAnki }), revision: 1 };
-    let writes = 0, online = true, race = false, proxy = null;
+    let writes = 0, online = true, race = false, proxy = null, failWrites = false;
     const readOptions = async () => structuredClone(options);
     globalThis.__subminerSetAnkiProxyUrl = async value => { const old = proxy; proxy = value; return old; };
     const send = async (type, request, target) => {
       if (type !== 'hd_options_write' || target !== 'hoshidicts-worker') throw Error('Unexpected request');
+      if (failWrites) throw Error('offline');
       if (race) {
         race = false;
         options.anki.templates[0].tags = options.anki.tags = ['User edit'];
@@ -162,6 +163,13 @@ test('re-reads concurrent settings edits before retrying its revisioned write', 
   await h.sync();
   assert.deepEqual(await h.run('options.anki.tags'), ['User edit']);
   assert.equal(await h.run('options.anki.model'), 'Japanese');
+});
+
+test('restores the previous proxy marker when every settings write fails', async () => {
+  const h = await harness();
+  await h.run(`proxy = 'http://127.0.0.1:9000'; failWrites = true`);
+  await assert.rejects(h.sync(), /offline/);
+  assert.equal(await h.run('proxy'), 'http://127.0.0.1:9000');
 });
 
 test('keeps sentence audio out of captured-audio settings and uses wordAudio first', () => {
