@@ -6620,10 +6620,17 @@ const configuredExternalYomitanProfilePath = yomitanProfilePolicy.externalProfil
 const yomitanExtensionRuntime = createYomitanExtensionRuntime({
   loadYomitanExtensionCore: async (deps) => {
     if (activeDictionaryBackend === 'yomitan') return loadYomitanExtensionCore(deps);
-    const extension = await hachidoriExtensionRuntime.ensureLoaded();
-    deps.setYomitanExtension(extension);
-    deps.setYomitanSession(getHachidoriSession());
-    return extension;
+    try {
+      const extension = await hachidoriExtensionRuntime.ensureLoaded();
+      deps.setYomitanExtension(extension);
+      deps.setYomitanSession(getHachidoriSession());
+      return extension;
+    } catch (error) {
+      logger.error('Failed to load Hachidori extension:', error);
+      deps.setYomitanExtension(null);
+      deps.setYomitanSession(null);
+      return null;
+    }
   },
   userDataPath: USER_DATA_PATH,
   externalProfilePath: configuredExternalYomitanProfilePath,
