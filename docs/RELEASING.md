@@ -152,7 +152,7 @@ Notes:
 - Tagged release workflow now also attempts to update `subminer-bin` on the AUR after GitHub Release publication.
 - Stable release tags update `https://docs.subminer.moe/` and `https://docs.subminer.moe/v/<version>/` through `.github/workflows/docs-pages.yml`; `/main/` continues to show development docs from `main`.
 - Keep Cloudflare Pages Git auto-deploy disabled for `docs.subminer.moe`. Production docs are direct-uploaded by Wrangler from GitHub Actions with `--branch main`.
-- AUR publish is best-effort: the workflow retries transient SSH clone/push failures, then warns and leaves the GitHub Release green if AUR still fails. Follow up with a manual `git push aur master` from the AUR checkout when needed.
+- AUR publish is best-effort: the workflow downloads the three known assets directly from the tagged release URLs, avoiding GitHub's sometimes-stale release asset listing. Downloads and SSH clone/push operations retry transient failures, then warn and skip AUR publication if retries are exhausted. Follow up with a manual `git push aur master` from the AUR checkout when needed.
 - Required GitHub Actions secret: `AUR_SSH_PRIVATE_KEY`. Add the matching public key to your AUR account before relying on the automation.
 - Release and prerelease workflows upload updater metadata (`latest*.yml`) and blockmaps (`*.blockmap`) alongside platform artifacts. Do not remove those files while `electron-updater` is enabled.
 - Release and prerelease workflows publish `subminer` for POSIX systems and `subminer.cmd` for Windows. Both locate a packaged app and use its private Bun runtime. Keep the corresponding-source archive named `bun-v1.3.5-source.tar.gz`.
