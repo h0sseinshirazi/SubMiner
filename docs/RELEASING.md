@@ -6,7 +6,7 @@
 
 - `claude` (Claude Code CLI) installed, on `PATH`, and authenticated.
   `changelog:build` and `changelog:prerelease-notes` invoke
-  `claude -p --model sonnet` to merge and rewrite `changes/*.md` fragments into
+  `claude -p --model opus --effort medium` to merge and rewrite `changes/*.md` fragments into
   a polished, user-facing release body. Either OAuth login (`claude /login`) or
   `ANTHROPIC_API_KEY` works. Install from <https://claude.com/claude-code> if
   you don't already have it.
