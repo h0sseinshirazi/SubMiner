@@ -7,6 +7,8 @@ if (process.platform !== 'linux')
   throw new Error('This app-entry smoke requires Linux XDG isolation.');
 const root = process.cwd();
 const backend = process.argv.includes('--backend=yomitan') ? 'yomitan' : 'hachidori';
+const externalYomitanProfile =
+  backend === 'hachidori' && !process.argv.includes('--bundled-yomitan');
 const profile = process.env.SUBMINER_DICTIONARY_SMOKE_DATA;
 assert(
   profile && fs.existsSync(profile),
@@ -19,9 +21,9 @@ fs.writeFileSync(
   path.join(profile, 'SubMiner', 'config.json'),
   JSON.stringify({
     dictionaryBackend: backend,
-    // An inactive external Yomitan profile must not block bundled settings in Hachidori mode.
+    // External Yomitan profiles must not block Hachidori settings.
     yomitan: {
-      externalProfilePath: backend === 'hachidori' ? path.join(profile, 'external-yomitan') : '',
+      externalProfilePath: externalYomitanProfile ? path.join(profile, 'external-yomitan') : '',
     },
     mpv: { socketPath: path.join(profile, 'missing-mpv.sock') },
     ankiConnect: { enabled: false },
@@ -76,16 +78,32 @@ function finish(exitCode) {
     'PASS actual --hachidori startup, visible settings, isolated backend session, native engine ready',
   );
   app.emit('second-instance', {}, [process.execPath, root, '--yomitan'], root);
-  let yomi;
-  for (let i = 0; i < 200; i++) {
-    yomi = BrowserWindow.getAllWindows().find(
-      (w) => w.getTitle().includes('Yomitan') && w.isVisible(),
+  if (externalYomitanProfile) {
+    const blockedMessage =
+      'Yomitan settings unavailable while using read-only external-profile mode.';
+    for (let i = 0; i < 100; i++) {
+      if (fs.readFileSync(process.env.SUBMINER_APP_LOG, 'utf8').includes(blockedMessage)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.ok(
+      fs.readFileSync(process.env.SUBMINER_APP_LOG, 'utf8').includes(blockedMessage),
+      '--yomitan is rejected when an external Yomitan profile is configured',
     );
-    if (yomi) break;
-    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(session.defaultSession.extensions.getAllExtensions().length, 0);
+    assert.ok(!BrowserWindow.getAllWindows().some((w) => w.getTitle().includes('Yomitan')));
+    console.log('PASS external Yomitan settings blocked while Hachidori settings remain available');
+  } else {
+    let yomi;
+    for (let i = 0; i < 200; i++) {
+      yomi = BrowserWindow.getAllWindows().find(
+        (w) => w.getTitle().includes('Yomitan') && w.isVisible(),
+      );
+      if (yomi) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.ok(yomi, 'inactive --yomitan settings opens');
+    assert.equal(yomi.webContents.session, session.defaultSession);
   }
-  assert.ok(yomi, 'inactive --yomitan settings opens');
-  assert.equal(yomi.webContents.session, session.defaultSession);
   assert.equal(window.webContents.session, session.fromPartition('persist:hachidori'));
   app.emit('second-instance', {}, [process.execPath, root, '--toggle-visible-overlay'], root);
   let overlay;

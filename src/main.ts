@@ -5226,7 +5226,7 @@ function initializeOverlayRuntime(): void {
 
 function openYomitanSettings(): boolean {
   if (activeDictionaryBackend === 'hachidori') {
-    if (yomitanProfilePolicy.isExternalReadOnlyMode()) {
+    if (configService.getConfig().yomitan.externalProfilePath.trim()) {
       logger.warn('Yomitan settings unavailable while using read-only external-profile mode.');
       return false;
     }

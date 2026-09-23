@@ -2,7 +2,7 @@ type: added
 area: dictionary
 
 - Added a bundled Hachidori dictionary backend alongside the default Yomitan backend. Select it with `dictionaryBackend` and restart SubMiner.
-- The tray and dictionary-settings shortcut follow the selected backend. `--hachidori` opens Hachidori settings, while `--yomitan` continues to open Yomitan settings. With Hachidori active, an inactive external Yomitan profile does not block the bundled Yomitan settings.
+- The tray and dictionary-settings shortcut follow the selected backend. `--hachidori` opens Hachidori settings, while `--yomitan` opens Yomitan settings unless a read-only external Yomitan profile is configured. This restriction also applies with Hachidori active, without blocking Hachidori settings.
 - Hachidori integrates with subtitle scanning, popup controls, lookup tracking, character dictionaries, and Anki media enrichment, with separate dictionaries and settings for each backend. Linked Docker hosts receive character dictionary uploads through `hachidori.externalHostManagementUrl`, retry busy imports, and replace the previous dictionary only after a successful import.
 - Hachidori auto-populates its first Anki template from SubMiner's deck, tags, and field mappings, detects an unambiguous matching note type, and preserves existing custom templates. Anki discovery retries after an unavailable connection.
 - Hachidori saves downloadable word audio before sending a note through SubMiner's Anki proxy, so freshly mined animated cards include the word-audio delay.
