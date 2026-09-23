@@ -16,6 +16,7 @@ import { requestHachidoriSharing } from './core/services/tokenizer/yomitan-parse
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+import { generateSentenceFurigana } from './core/services/tokenizer/sentence-furigana';
 import {
   app,
   BrowserWindow,
@@ -5212,6 +5213,13 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
+function generateMiningSentenceFurigana(
+  text: string,
+  highlightedText?: string,
+): Promise<string | null> {
+  return generateSentenceFurigana(text, highlightedText, getYomitanParserRuntimeDeps(), logger);
+}
+
 function initializeOverlayRuntime(): void {
   initializeOverlayRuntimeHandler();
   if (!(appState.initialArgs && isHeadlessInitialCommand(appState.initialArgs))) {
@@ -5221,6 +5229,7 @@ function initializeOverlayRuntime(): void {
   appState.ankiIntegration?.setKnownWordCacheUpdatedCallback(refreshCurrentSubtitleAnnotations);
   appState.ankiIntegration?.setSubtitleMiningContextConsumer(consumePendingSubtitleMiningContext);
   appState.ankiIntegration?.setMediaTimingReviewCallback(mediaTimingReviewRuntime.requestReview);
+  appState.ankiIntegration?.setSentenceFuriganaGenerator(generateMiningSentenceFurigana);
   syncOverlayMpvSubtitleSuppression();
 }
 
@@ -6164,6 +6173,7 @@ const { registerIpcRuntimeHandlers } = composeIpcRuntimeHandlers({
         appState.ankiIntegration?.setMediaTimingReviewCallback(
           mediaTimingReviewRuntime.requestReview,
         );
+        appState.ankiIntegration?.setSentenceFuriganaGenerator(generateMiningSentenceFurigana);
       },
       getKnownWordCacheStatePath: () => path.join(USER_DATA_PATH, 'known-words-cache.json'),
       getCachedMediaPath: (currentVideoPath, kind) =>
